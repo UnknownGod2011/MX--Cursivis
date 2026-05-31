@@ -170,12 +170,12 @@ h1 {
 .setup-band,
 .support-band,
 .manual-band {
-  border-bottom: 0;
   padding: 42px 0;
-  padding-bottom: 72px;
+  border-bottom: 1px solid var(--line);
 }
 
 .setup-band h2,
+.showcase-band h2,
 .support-band h2,
 .manual-band h2 {
   font-size: 28px;
@@ -202,10 +202,49 @@ h1 {
 }
 
 .feature-grid p,
+.showcase-band p,
 .support-band p,
 .manual-band p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.showcase-band {
+  padding: 42px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-heading {
+  max-width: 760px;
+  margin-bottom: 22px;
+}
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.showcase-grid figure {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.showcase-grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-bottom: 1px solid var(--line);
+}
+
+.showcase-grid figcaption {
+  padding: 12px 14px 14px;
+  color: var(--text);
+  font-weight: 700;
 }
 
 .support-band {
@@ -238,6 +277,10 @@ h1 {
   .feature-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -253,4 +296,9 @@ h1 {
   .secondary-button {
     width: 100%;
   }
+}
+
+.manual-band {
+  border-bottom: 0;
+  padding-bottom: 72px;
 }
