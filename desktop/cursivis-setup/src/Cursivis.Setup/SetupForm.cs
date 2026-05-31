@@ -178,6 +178,7 @@ public sealed class SetupForm : Form
 
         SetStatus("Step 3 of 5: Installing runtime files", "Copying Cursivis into your local app data folder.");
         StopInstalledRuntimeProcesses(installRoot);
+        StopCursivisPortListeners();
         CopyDirectory(payloadRoot, installRoot);
 
         SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies. This is the longest first-time step.");
@@ -369,6 +370,86 @@ public sealed class SetupForm : Form
             catch
             {
                 // If Windows already closed the process or access is denied, continue the install.
+            }
+        }
+    }
+
+    private void StopCursivisPortListeners()
+    {
+        var reservedPorts = new HashSet<string>(StringComparer.Ordinal) { "8080", "48820", "48830" };
+        var pids = new HashSet<int>();
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "netstat",
+                Arguments = "-ano -p TCP",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using var netstat = Process.Start(startInfo);
+            if (netstat == null)
+            {
+                return;
+            }
+
+            var output = netstat.StandardOutput.ReadToEnd();
+            netstat.WaitForExit(5000);
+
+            foreach (var rawLine in output.Split(Environment.NewLine))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || !line.Contains("LISTENING", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 5)
+                {
+                    continue;
+                }
+
+                var localAddress = parts[1];
+                var portIndex = localAddress.LastIndexOf(':');
+                if (portIndex < 0)
+                {
+                    continue;
+                }
+
+                var port = localAddress[(portIndex + 1)..];
+                if (!reservedPorts.Contains(port))
+                {
+                    continue;
+                }
+
+                if (int.TryParse(parts[^1], out var pid) && pid != Environment.ProcessId)
+                {
+                    pids.Add(pid);
+                }
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var pid in pids)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                Log("Stopping previous Cursivis port listener: " + process.ProcessName);
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+            catch
+            {
+                // The process may have already exited or may deny termination.
             }
         }
     }
