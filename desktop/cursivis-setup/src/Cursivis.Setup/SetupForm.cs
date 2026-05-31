@@ -191,6 +191,7 @@ public sealed class SetupForm : Form
         Log("Runtime profile: " + profilePath);
         RegisterStartup(installRoot);
         LaunchCompanion(installRoot);
+        LaunchHotkeyHost(installRoot);
     }
 
     private async Task<string> EnsurePortableNodeAsync(string installRoot, CancellationToken token)
@@ -566,6 +567,24 @@ public sealed class SetupForm : Form
             UseShellExecute = true
         });
         Log("Launched Cursivis Companion.");
+    }
+
+    private void LaunchHotkeyHost(string root)
+    {
+        var hotkeyExe = Path.Combine(root, "app", "hotkey-host", "Cursivis.HotkeyHost.exe");
+        if (!File.Exists(hotkeyExe))
+        {
+            Log("Hotkey host executable was not found after install.");
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = hotkeyExe,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        });
+        Log("Launched Cursivis hotkey host.");
     }
 
     private void SetStatus(string status, string detail)
