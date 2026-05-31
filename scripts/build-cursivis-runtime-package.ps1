@@ -19,6 +19,7 @@ $triggerProject = Join-Path $root "desktop\cursivis-trigger-launcher\src\Cursivi
 $backendDir = Join-Path $root "backend\gemini-agent"
 $browserAgentDir = Join-Path $root "desktop\browser-action-agent"
 $extensionBridgeDir = Join-Path $root "desktop\browser-native-host"
+$sharedDir = Join-Path $root "shared"
 $docsDir = Join-Path $root "docs"
 $pluginPackage = Join-Path $root "artifacts\logitech-marketplace\Cursivis_$Version.lplug4"
 
@@ -61,6 +62,7 @@ if (-not $SkipDotnetPublish) {
 Copy-CleanDirectory -Source $backendDir -Destination (Join-Path $runtimeRoot "backend\gemini-agent") -Exclude @("node_modules")
 Copy-CleanDirectory -Source $browserAgentDir -Destination (Join-Path $runtimeRoot "desktop\browser-action-agent") -Exclude @("node_modules")
 Copy-CleanDirectory -Source $extensionBridgeDir -Destination (Join-Path $runtimeRoot "desktop\browser-native-host")
+Copy-CleanDirectory -Source $sharedDir -Destination (Join-Path $runtimeRoot "shared")
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.cmd") -Destination $packageRoot -Force
