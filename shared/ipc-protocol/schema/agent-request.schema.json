@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursivis.local/schema/agent-request.schema.json",
+  "title": "AgentRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "requestId", "mode", "selection", "timestampUtc"],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["smart", "guided"]
+    },
+    "actionHint": {
+      "type": "string"
+    },
+    "voiceCommand": {
+      "type": "string"
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["text", "image", "text_image", "none"]
+        },
+        "text": {
+          "type": "string"
+        },
+        "imageBase64": {
+          "type": "string"
+        },
+        "imageMimeType": {
+          "type": "string",
+          "enum": ["image/png", "image/jpeg"]
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activeApp": { "type": "string" },
+        "cursorX": { "type": "integer", "minimum": 0 },
+        "cursorY": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "timestampUtc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "selection": {
+            "properties": { "kind": { "const": "text" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selection": {
+            "required": ["text"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "selection": {
+            "properties": { "kind": { "const": "image" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selection": {
+            "required": ["imageBase64", "imageMimeType"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "selection": {
+            "properties": { "kind": { "const": "text_image" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selection": {
+            "required": ["text", "imageBase64", "imageMimeType"]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "backgroundColor": 4280098071,
+  "items": [
+    {
+      "text": "DIAL",
+      "textColor": 4294967295,
+      "fontSize": 18,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 24,
+        "width": 84,
+        "height": 36
+      }
+    }
+  ]
+}

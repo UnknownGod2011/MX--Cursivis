@@ -1,0 +1,21 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yNiAxNmgzNGwxNCAxNHY0NGExMCAxMCAwIDAgMS0xMCAxMEgyNmExMCAxMCAwIDAgMS0xMC0xMFYyNmExMCAxMCAwIDAgMSAxMC0xMFoiIGZpbGw9IiMxNDE4MUQiIHN0cm9rZT0iI0Y1RjdGQSIgc3Ryb2tlLXdpZHRoPSI3Ii8+PHBhdGggZD0iTTYwIDE3djE3aDE2IiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iNyIvPjxwYXRoIGQ9Ik0zMCA0MmgzMk0zMCA1NGgyNE0zMCA2NmgxOCIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjciLz48cGF0aCBkPSJNNTkgNzBsMTgtMTggNyA3LTE4IDE4LTEwIDMgMy0xMFoiIGZpbGw9IiMxNDE4MUQiIHN0cm9rZT0iI0Y1RjdGQSIgc3Ryb2tlLXdpZHRoPSI2Ii8+PHBhdGggZD0iTTc4IDIxbDItNiAyIDYgNiAyLTYgMi0yIDYtMi02LTYtMiA2LTJaIiBmaWxsPSIjRjVGN0ZBIiBzdHJva2U9Im5vbmUiLz48L3N2Zz4=",
+      "imageFileName": "prompt-optimizer-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
+      "isVisible": true,
+      "itemType": "Image",
+      "area": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
+      }
+    }
+  ]
+}

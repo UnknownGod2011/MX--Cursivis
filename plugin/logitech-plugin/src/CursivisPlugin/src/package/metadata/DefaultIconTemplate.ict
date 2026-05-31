@@ -1,0 +1,33 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "text": "CURSIVIS",
+      "textColor": 4294967295,
+      "fontSize": 10,
+      "fontName": "Brown Logitech Pan Light",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 28,
+        "width": 84,
+        "height": 20
+      }
+    },
+    {
+      "text": "AI",
+      "textColor": 4289784063,
+      "fontSize": 16,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 28,
+        "y": 6,
+        "width": 44,
+        "height": 18
+      }
+    }
+  ]
+}

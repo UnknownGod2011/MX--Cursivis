@@ -1,0 +1,21 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yNyAyNCA1MCA3NGw4LTE4IDE4LTgtNDktMjRaIiBmaWxsPSIjMTQxODFEIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iOCIvPjxwYXRoIGQ9Ik02NyAyMHYxMCIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjEwIi8+PHBhdGggZD0iTTY3IDIwdjEwIiBzdHJva2U9IiMxNDE4MUQiIHN0cm9rZS13aWR0aD0iNSIvPjxwYXRoIGQ9Ik02MiAyNWgxMCIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjEwIi8+PHBhdGggZD0iTTYyIDI1aDEwIiBzdHJva2U9IiMxNDE4MUQiIHN0cm9rZS13aWR0aD0iNSIvPjwvc3ZnPg==",
+      "imageFileName": "action-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
+      "isVisible": true,
+      "itemType": "Image",
+      "area": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
+      }
+    }
+  ]
+}

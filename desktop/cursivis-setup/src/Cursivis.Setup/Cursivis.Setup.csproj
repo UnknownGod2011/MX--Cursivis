@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CursivisCompanionSetup</AssemblyName>
+    <RootNamespace>Cursivis.Setup</RootNamespace>
+    <Version>1.4.1</Version>
+    <Authors>Tanush Shah</Authors>
+    <Product>Cursivis Companion Setup</Product>
+    <Description>One-click setup for the Cursivis Companion runtime.</Description>
+  </PropertyGroup>
+
+</Project>

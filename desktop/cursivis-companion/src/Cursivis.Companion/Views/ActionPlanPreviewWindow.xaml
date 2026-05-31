@@ -1,0 +1,177 @@
+<Window x:Class="Cursivis.Companion.Views.ActionPlanPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Take Action Preview"
+        Width="560"
+        Height="560"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResize"
+        MinWidth="500"
+        MinHeight="470"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True">
+    <Border Background="{DynamicResource Brush.ResultPanelShell}"
+            BorderBrush="{DynamicResource Brush.ResultPanelStroke}"
+            BorderThickness="1"
+            CornerRadius="24"
+            Padding="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30"
+                              ShadowDepth="0"
+                              Color="#B3000000"
+                              Opacity="0.82" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border CornerRadius="18"
+                    Background="{DynamicResource Brush.ResultPanelHeader}"
+                    BorderBrush="{DynamicResource Brush.ResultPanelSurfaceBorder}"
+                    BorderThickness="1"
+                    Padding="14,12"
+                    MouseLeftButtonDown="HeaderCard_OnMouseLeftButtonDown">
+                <StackPanel>
+                    <TextBlock x:Name="TitleText"
+                               Style="{StaticResource HeadlineTextStyle}"
+                               FontSize="20"
+                               Text="Preview Take Action" />
+                    <TextBlock x:Name="SummaryText"
+                               Margin="0,6,0,0"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1"
+                    Margin="0,12,0,0"
+                    Padding="12,8"
+                    CornerRadius="16"
+                    Background="{DynamicResource Brush.ResultPanelHeader}"
+                    BorderBrush="{DynamicResource Brush.ResultPanelSurfaceBorder}"
+                    BorderThickness="1"
+                    HorizontalAlignment="Left">
+                <TextBlock x:Name="CurrentActionText"
+                           Style="{StaticResource HeadlineTextStyle}"
+                           FontSize="12"
+                           Foreground="{DynamicResource Brush.TextMain}"
+                           Text="Current result action: Rewrite" />
+            </Border>
+
+            <Border Grid.Row="2"
+                    Margin="0,12,0,0"
+                    CornerRadius="18"
+                    Background="{DynamicResource Brush.ResultPanelSurface}"
+                    BorderBrush="{DynamicResource Brush.ResultPanelSurfaceBorder}"
+                    BorderThickness="1"
+                    Padding="12">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                               FontSize="12"
+                               Text="Optional execution instruction" />
+                    <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="11"
+                               Text="Add or refine what Cursivis should do before it executes this browser action." />
+                    <TextBox x:Name="InstructionTextBox"
+                             Margin="0,10,0,0"
+                             MinHeight="74"
+                             Style="{StaticResource GlassTextBoxStyle}"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="True"
+                             VerticalContentAlignment="Top" />
+                    <TextBlock x:Name="RiskText"
+                               Margin="0,10,0,0"
+                               Foreground="{DynamicResource Brush.Gold}"
+                               FontFamily="Bahnschrift SemiBold"
+                               FontSize="12"
+                               Visibility="Collapsed"
+                               Text="Confirmation is required before the final execution step." />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3"
+                    Margin="0,12,0,0"
+                    Background="{DynamicResource Brush.ResultPanelSurface}"
+                    BorderBrush="{DynamicResource Brush.ResultPanelSurfaceBorder}"
+                    BorderThickness="1"
+                    CornerRadius="20"
+                    Padding="12">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Top"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="11"
+                               Text="Planned execution steps" />
+                    <ListBox x:Name="StepList"
+                             Margin="0,10,0,0"
+                             Style="{StaticResource GlassListBoxStyle}"
+                             ItemContainerStyle="{StaticResource GlassListBoxItemStyle}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                           FontSize="13"
+                                           Text="{Binding}" 
+                                           TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Row="4"
+                  Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Thumb Grid.Column="0"
+                       Width="18"
+                       Height="18"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Bottom"
+                       Cursor="SizeNWSE"
+                       DragDelta="ResizeThumb_OnDragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Grid Width="18" Height="18">
+                                <Path Stroke="{DynamicResource Brush.TextMuted}"
+                                      StrokeThickness="1.2"
+                                      Data="M2,16 L16,2 M8,16 L16,8 M12,16 L16,12" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Width="112"
+                            Height="38"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource GlassButtonStyle}"
+                            Content="Change Result"
+                            Click="ChangeResult_Click" />
+                    <Button Width="88"
+                            Height="38"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource MutedButtonStyle}"
+                            Content="Cancel"
+                            Click="Cancel_Click" />
+                    <Button x:Name="RunButton"
+                            Width="88"
+                            Height="38"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Content="Run"
+                            Click="Run_Click" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

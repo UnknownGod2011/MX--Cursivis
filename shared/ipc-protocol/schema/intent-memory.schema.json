@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursivis.local/schema/intent-memory.schema.json",
+  "title": "IntentMemoryStore",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updatedUtc", "entries"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "updatedUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contentType", "action", "count", "lastUsedUtc"],
+        "properties": {
+          "contentType": { "type": "string" },
+          "action": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 },
+          "lastUsedUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

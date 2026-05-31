@@ -1,0 +1,33 @@
+{
+  "backgroundColor": 4283243417,
+  "items": [
+    {
+      "text": "LISTEN",
+      "textColor": 4294967295,
+      "fontSize": 16,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 16,
+        "width": 84,
+        "height": 24
+      }
+    },
+    {
+      "text": "Press Start",
+      "textColor": 4294518527,
+      "fontSize": 6,
+      "fontName": "Brown Logitech Pan Light",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 70,
+        "width": 84,
+        "height": 14
+      }
+    }
+  ]
+}

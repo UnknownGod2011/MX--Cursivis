@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursivis.local/schema/trigger-event.schema.json",
+  "title": "TriggerEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "eventType",
+    "requestId",
+    "source",
+    "pressType",
+    "cursor",
+    "timestampUtc"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "eventType": {
+      "type": "string",
+      "const": "trigger"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["logitech-plugin", "mock-trigger-ui"]
+    },
+    "pressType": {
+      "type": "string",
+      "enum": ["tap", "long_press", "long_press_start", "long_press_end", "dial_press", "dial_tick"]
+    },
+    "dialDelta": {
+      "type": "integer",
+      "minimum": -10,
+      "maximum": 10
+    },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "timestampUtc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "pressType": {
+            "const": "dial_tick"
+          }
+        }
+      },
+      "then": {
+        "required": ["dialDelta"]
+      }
+    }
+  ]
+}

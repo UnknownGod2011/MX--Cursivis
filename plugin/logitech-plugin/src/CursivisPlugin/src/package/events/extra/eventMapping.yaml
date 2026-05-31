@@ -1,0 +1,13 @@
+haptics:
+  action_change:
+    DEFAULT: sharp_state_change
+    MX Master 4: subtle_collision
+  action_execute:
+    DEFAULT: sharp_collision
+    MX Master 4: sharp_collision
+  processing_start:
+    DEFAULT: wave
+    MX Master 4: damp_state_change
+  processing_complete:
+    DEFAULT: completed
+    MX Master 4: completed

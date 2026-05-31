@@ -1,0 +1,834 @@
+<Window x:Class="Cursivis.Companion.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cursivis Companion"
+        Height="700"
+        Width="456"
+        MinWidth="428"
+        MinHeight="620"
+        ResizeMode="CanResizeWithGrip"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        Left="20"
+        Top="20"
+        ShowInTaskbar="False"
+        KeyDown="MainWindow_OnKeyDown"
+        PreviewMouseLeftButtonUp="MainWindow_OnPreviewMouseLeftButtonUp">
+    <Border Background="{DynamicResource Brush.WindowGradient}" Padding="10">
+        <Border CornerRadius="24"
+                BorderBrush="{DynamicResource Brush.WindowBorder}"
+                BorderThickness="1"
+                Background="{DynamicResource Brush.SurfaceGlass}"
+                Padding="16">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="26"
+                                  ShadowDepth="0"
+                                  Color="#66000000"
+                                  Opacity="0.34" />
+            </Border.Effect>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False"
+                          Padding="0">
+                <ScrollViewer.Resources>
+                    <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                </ScrollViewer.Resources>
+            <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
+                        BorderThickness="1"
+                        Padding="18,16,18,14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0"
+                                   LastChildFill="False">
+                            <Border DockPanel.Dock="Right"
+                                    Margin="12,0,0,0"
+                                    Padding="11,7"
+                                    CornerRadius="13"
+                                    Background="{DynamicResource Brush.HeroBadgeBackground}"
+                                    BorderBrush="{DynamicResource Brush.HeroBadgeBorder}"
+                                    BorderThickness="1"
+                                    VerticalAlignment="Top">
+                                <TextBlock Style="{StaticResource SubtleTextStyle}"
+                                           FontSize="10.5"
+                                           Foreground="{DynamicResource Brush.HeroBadgeText}"
+                                           Text="Logitech-ready" />
+                            </Border>
+
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="24"
+                                       Text="Cursivis Companion"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="12.5"
+                                   LineHeight="18"
+                                   TextWrapping="Wrap"
+                                   Text="Real Logitech plugin runtime and mouse-first workflow controls for daily Cursivis use." />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="2"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
+                        BorderThickness="1"
+                        Padding="16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Logitech Runtime" />
+                            <TextBlock Margin="0,4,0,12"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Text="Live status from Logi Options+, Logi Plugin Service, and the installed Cursivis plugin." />
+                        </StackPanel>
+
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Logi Options+" />
+                            <TextBlock x:Name="LogitechOptionsStatusText"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Checking..." />
+
+                            <TextBlock Grid.Row="1"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Plugin Service" />
+                            <TextBlock x:Name="LogitechPluginServiceStatusText"
+                                       Grid.Row="1"
+                                       Grid.Column="1"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Checking..." />
+
+                            <TextBlock Grid.Row="2"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Cursivis Plugin" />
+                            <TextBlock x:Name="LogitechPluginStatusText"
+                                       Grid.Row="2"
+                                       Grid.Column="1"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Checking..." />
+
+                            <TextBlock Grid.Row="3"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Haptic Channel" />
+                            <TextBlock x:Name="LogitechHapticStatusText"
+                                       Grid.Row="3"
+                                       Grid.Column="1"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Checking..." />
+
+                            <TextBlock Grid.Row="4"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Runtime Mode" />
+                            <TextBlock x:Name="LogitechRuntimeModeText"
+                                       Grid.Row="4"
+                                       Grid.Column="1"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Checking..." />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="3"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
+                        BorderThickness="1"
+                        Padding="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Interaction Mode" />
+                            <TextBlock Margin="0,4,0,12"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Text="Smart Mode lets Gemini decide. Guided Mode opens staged options." />
+                            <ComboBox x:Name="ModeCombo"
+                                      Width="244"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="ModeCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Smart Mode (AutoPerform)" Tag="Smart" />
+                                <ComboBoxItem Content="Guided Mode (Manual)" Tag="Guided" />
+                            </ComboBox>
+                            <TextBlock Margin="0,14,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Appearance" />
+                            <ComboBox x:Name="ThemeCombo"
+                                      Width="244"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="ThemeCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Dark" Tag="Dark" />
+                                <ComboBoxItem Content="Light" Tag="Light" />
+                            </ComboBox>
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Switches the companion and AI result box between premium dark and light glass themes." />
+                            <TextBlock Margin="0,12,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Talk Trigger Input" />
+                            <ComboBox x:Name="TalkTriggerInputCombo"
+                                      Width="244"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="TalkTriggerInputCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Voice trigger" Tag="Voice" />
+                                <ComboBoxItem Content="Text trigger" Tag="Text" />
+                            </ComboBox>
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Voice trigger records and transcribes. Text trigger opens a sleek prompt bar beside the orb for noisy environments." />
+                            <CheckBox x:Name="ShowOrbDuringWorkflowCheckBox"
+                                      Margin="0,12,0,0"
+                                      Foreground="{DynamicResource Brush.TextMain}"
+                                      FontSize="12"
+                                      Content="Show orb during workflows"
+                                      Checked="ShowOrbDuringWorkflowCheckBox_OnChanged"
+                                      Unchecked="ShowOrbDuringWorkflowCheckBox_OnChanged" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="When off, the orb stays hidden and only the result panel appears for normal smart flows." />
+                            <CheckBox x:Name="PlayHapticSoundCheckBox"
+                                      Margin="0,12,0,0"
+                                      Foreground="{DynamicResource Brush.TextMain}"
+                                      FontSize="12"
+                                      Content="Play sound with haptics"
+                                      Checked="PlayHapticSoundCheckBox_OnChanged"
+                                      Unchecked="PlayHapticSoundCheckBox_OnChanged" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Adds an optional companion sound on top of Logitech haptics. Off is recommended and is the default." />
+                            <TextBlock Margin="0,12,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Take Action Prompt" />
+                            <ComboBox x:Name="TakeActionPromptCombo"
+                                      Width="244"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="TakeActionPromptCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Always ask to run" Tag="AlwaysAskToRun" />
+                                <ComboBoxItem Content="Confirm before execution" Tag="ConfirmBeforeExecution" />
+                            </ComboBox>
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="This affects Take Action from a normal result only. Direct Action from the ring still runs immediately." />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Width="78"
+                                Height="42"
+                                Margin="14,0,0,0"
+                                VerticalAlignment="Top"
+                                Style="{StaticResource MutedButtonStyle}"
+                                Content="Exit"
+                                Click="ExitButton_OnClick" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="4"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
+                        BorderThickness="1"
+                        Padding="16"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Companion Controls" />
+                            <TextBlock Margin="0,4,0,14"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       Text="Fallback and testing controls while Logitech hardware is unavailable. The real plugin/runtime remains the primary path." />
+                        </StackPanel>
+
+                        <UniformGrid Grid.Row="1"
+                                     Columns="2"
+                                     Rows="2"
+                                     Margin="0,2,0,0">
+                            <Button x:Name="TriggerButton"
+                                    Height="54"
+                                    Margin="0,0,10,10"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="Trigger"
+                                    Click="TriggerButton_OnClick" />
+                            <Button x:Name="TakeActionButton"
+                                    Height="54"
+                                    Margin="0,0,0,10"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Take Action"
+                                    Click="TakeActionButton_OnClick" />
+                            <Button x:Name="LongPressButton"
+                                    Height="54"
+                                    Margin="0,0,10,0"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Hold to Talk"
+                                    PreviewMouseLeftButtonDown="LongPressButton_OnMouseDown"
+                                    PreviewMouseLeftButtonUp="LongPressButton_OnMouseUp"
+                                    MouseLeave="LongPressButton_OnMouseLeave" />
+                            <Button x:Name="DialPressButton"
+                                    Height="54"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Image Selection"
+                                    Click="DialPressButton_OnClick" />
+                        </UniformGrid>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="5"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
+                        BorderThickness="1"
+                        Padding="16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="12"
+                                   Text="Virtual Action Ring" />
+                        <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Text="This mirrors the intended dial / Actions Ring behavior until supported MX hardware is connected." />
+                            <Slider x:Name="DialSlider"
+                                    Margin="0,14,0,0"
+                                    Style="{StaticResource GlassSliderStyle}"
+                                    Minimum="-10"
+                                    Maximum="10"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    ValueChanged="DialSlider_OnValueChanged" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="6"
+                        Margin="0,14,0,0"
+                        CornerRadius="20"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
+                        BorderThickness="1"
+                        Padding="14,12">
+                    <TextBlock Grid.Row="5"
+                               x:Name="HotkeysText"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Text="Hotkeys: Ctrl+Alt+Space = Trigger   |   Ctrl+Alt+A = Take Action   |   Ctrl+Alt+V = Talk" />
+                </Border>
+
+                <Border Grid.Row="7"
+                        Margin="0,14,0,0"
+                        CornerRadius="20"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
+                        BorderThickness="1"
+                        Padding="14,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="12"
+                                   Text="Assign Cursivis Go Trigger to a Shortcut" />
+                        <TextBlock Margin="0,4,0,10"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Text="Press a shortcut here, then map your MX gesture button to the same shortcut in Logi Options+. Cursivis keeps the shortcut host registered after restart." />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Height="38"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="GoShortcutTextBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12.5"
+                                         IsReadOnly="True"
+                                         Text="Ctrl+Alt+Space"
+                                         PreviewKeyDown="GoShortcutTextBox_OnPreviewKeyDown" />
+                            </Border>
+                            <Button x:Name="CaptureGoShortcutButton"
+                                    Grid.Column="1"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="10,0,0,0"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Capture"
+                                    Click="CaptureGoShortcutButton_OnClick" />
+                            <Button x:Name="ConnectGoShortcutButton"
+                                    Grid.Column="2"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="8,0,0,0"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="Connect"
+                                    Click="ConnectGoShortcutButton_OnClick" />
+                        </Grid>
+                        <TextBlock x:Name="GoShortcutStatusText"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   TextWrapping="Wrap"
+                                   Text="Gesture shortcut ready: Ctrl+Alt+Space." />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="AiBackendSection"
+                        Grid.Row="1"
+                        Margin="0,14,0,0"
+                        CornerRadius="20"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
+                        BorderThickness="1"
+                        Padding="14,12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="AI Backend" />
+                            <TextBlock Margin="0,4,0,10"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11.5"
+                                       TextWrapping="Wrap"
+                                       Text="Choose API LLM (Recommended) for the best answers, or Local LLM for Ollama on this PC. Local models stay idle until Cursivis calls them and release memory shortly after use." />
+                            <Border Margin="0,0,0,10"
+                                    Padding="10,7"
+                                    CornerRadius="12"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBlock x:Name="AiBackendActiveText"
+                                           Style="{StaticResource HeadlineTextStyle}"
+                                           FontSize="11.5"
+                                           Text="Active backend: API LLM" />
+                            </Border>
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="AiBackendCombo"
+                                      MinWidth="0"
+                                      HorizontalAlignment="Stretch"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="AiBackendCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="API LLM (Recommended)" Tag="gemini" />
+                                <ComboBoxItem Content="Local LLM" Tag="local_ollama" />
+                                <ComboBoxItem Content="Hosted Cursivis AI" Tag="hosted_cursivis" />
+                            </ComboBox>
+                            <Button x:Name="UseApiBackendButton"
+                                    Grid.Column="1"
+                                    Width="112"
+                                    Height="38"
+                                    Margin="10,0,0,0"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Use"
+                                    Click="UseApiBackendButton_OnClick" />
+                            <Button x:Name="TestApiBackendButton"
+                                    Grid.Column="2"
+                                    Width="56"
+                                    Height="38"
+                                    Margin="7,0,0,0"
+                                    Style="{StaticResource MutedButtonStyle}"
+                                    Content="Test"
+                                    Click="TestApiBackendButton_OnClick" />
+                        </Grid>
+
+                        <StackPanel x:Name="ApiLlmSection"
+                                    Grid.Row="2"
+                                    Margin="0,12,0,0">
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="API key pool" />
+                            <TextBlock Margin="0,4,0,8"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Paste one Gemini API key per line. The line numbers are only a guide and cannot be edited. Saving replaces the pool used for automatic key rotation." />
+                            <TextBlock x:Name="ApiKeyPoolSummaryText"
+                                       Margin="0,0,0,8"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="10.5"
+                                       TextWrapping="Wrap"
+                                       Text="Saved API keys: checking..." />
+                            <Border Height="126"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1"
+                                    ClipToBounds="True">
+                                <Grid ClipToBounds="True">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="38" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0"
+                                            Background="{DynamicResource Brush.ButtonSecondaryBackground}"
+                                            CornerRadius="14,0,0,14"
+                                            BorderBrush="{DynamicResource Brush.InputBorder}"
+                                            BorderThickness="0,0,1,0"
+                                            ClipToBounds="True">
+                                        <TextBlock x:Name="ApiKeyLineNumbersText"
+                                                   Margin="0,8,7,0"
+                                                   HorizontalAlignment="Right"
+                                                   Style="{StaticResource SubtleTextStyle}"
+                                                   FontFamily="Cascadia Mono, Consolas"
+                                                   FontSize="12"
+                                                   LineHeight="18"
+                                                   Text="1:" />
+                                    </Border>
+                                    <TextBox x:Name="ApiKeyTextBox"
+                                             Grid.Column="1"
+                                             MinWidth="0"
+                                             ClipToBounds="True"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Padding="10,8,12,8"
+                                             VerticalContentAlignment="Top"
+                                             Foreground="{DynamicResource Brush.InputForeground}"
+                                             CaretBrush="{DynamicResource Brush.InputForeground}"
+                                             TextBoxBase.SelectionBrush="{DynamicResource Brush.ButtonAccentBackground}"
+                                             TextBoxBase.SelectionTextBrush="{DynamicResource Brush.ButtonAccentText}"
+                                             FontFamily="Cascadia Mono, Consolas"
+                                             FontSize="12"
+                                             TextOptions.TextFormattingMode="Display"
+                                             TextAlignment="Left"
+                                             TextWrapping="NoWrap"
+                                             AcceptsReturn="True"
+                                             HorizontalScrollBarVisibility="Disabled"
+                                             VerticalScrollBarVisibility="Visible"
+                                             TextChanged="ApiKeyTextBox_OnTextChanged">
+                                        <TextBox.Resources>
+                                            <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                                        </TextBox.Resources>
+                                    </TextBox>
+                                </Grid>
+                            </Border>
+                            <UniformGrid Columns="2" Rows="1" Margin="0,10,0,0">
+                                <Button x:Name="SetApiKeyButton"
+                                        Height="38"
+                                        Margin="0,0,8,0"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Content="Save API Keys"
+                                        Click="SetApiKeyButton_OnClick" />
+                                <Button x:Name="OpenApiKeyHelpButton"
+                                        Height="38"
+                                        Style="{StaticResource MutedButtonStyle}"
+                                        Content="Get API Key"
+                                        Click="OpenApiKeyHelpButton_OnClick" />
+                            </UniformGrid>
+                        </StackPanel>
+
+                        <StackPanel x:Name="LocalLlmSection"
+                                    Grid.Row="3"
+                                    Margin="0,12,0,0">
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Local LLM" />
+                            <TextBlock Margin="0,4,0,8"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Step 1: Install or open Ollama. Step 2: choose a model. For better answers, use API LLM or Cursivis LLM. Local LLMs are private, but not as fast or intelligent as API LLMs." />
+                            <ComboBox x:Name="LocalModelCombo"
+                                      HorizontalAlignment="Stretch"
+                                      MinHeight="38"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="LocalModelCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Granite Vision 2B - fastest, 6 GB+ RAM" Tag="granite3.2-vision:2b" />
+                                <ComboBoxItem Content="Gemma 3 4B - balanced, 8 GB+ RAM" Tag="gemma3:4b" />
+                                <ComboBoxItem Content="Gemma 4 E2B - advanced, 12 GB+ RAM" Tag="gemma4:e2b" />
+                                <ComboBoxItem Content="Gemma 4 E4B - quality, 16 GB+ RAM" Tag="gemma4:e4b" />
+                                <ComboBoxItem Content="Gemma 4 26B - workstation, 48 GB+ RAM" Tag="gemma4:26b" />
+                                <ComboBoxItem Content="Gemma 4 31B - workstation, 48 GB+ RAM" Tag="gemma4:31b" />
+                            </ComboBox>
+                            <Border Height="38"
+                                    Margin="0,10,0,0"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="OllamaUrlTextBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12.5"
+                                         Text="http://127.0.0.1:11434"
+                                         TextWrapping="NoWrap" />
+                            </Border>
+                            <UniformGrid Columns="2" Rows="2" Margin="0,10,0,0">
+                                <Button x:Name="UseLocalBackendButton"
+                                        Height="38"
+                                        Margin="0,0,8,8"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Content="Use Local"
+                                        Click="UseLocalBackendButton_OnClick" />
+                                <Button x:Name="CheckLocalBackendButton"
+                                        Height="38"
+                                        Margin="0,0,0,8"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Content="Check Local"
+                                        Click="CheckLocalBackendButton_OnClick" />
+                                <Button x:Name="DownloadLocalModelButton"
+                                        Height="38"
+                                        Margin="0,0,8,0"
+                                        Style="{StaticResource GlassButtonStyle}"
+                                        Content="Download &amp; Use"
+                                        Click="DownloadLocalModelButton_OnClick" />
+                                <Button x:Name="OpenOllamaDownloadButton"
+                                        Height="38"
+                                        Style="{StaticResource MutedButtonStyle}"
+                                        Content="Download Ollama"
+                                        Click="OpenOllamaDownloadButton_OnClick" />
+                            </UniformGrid>
+                            <Grid x:Name="DownloadModelProgressGrid"
+                                  Margin="0,10,0,0"
+                                  Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <ProgressBar x:Name="DownloadLocalModelProgressBar"
+                                             Grid.Row="0"
+                                             Grid.Column="0"
+                                             Height="8"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="0"
+                                             Background="{DynamicResource Brush.InputBackground}"
+                                             Foreground="{DynamicResource Brush.TextMain}"
+                                             BorderThickness="0" />
+                                <Button x:Name="CancelDownloadModelButton"
+                                        Grid.Row="0"
+                                        Grid.Column="1"
+                                        Width="74"
+                                        Height="30"
+                                        Margin="10,0,0,0"
+                                        Style="{StaticResource MutedButtonStyle}"
+                                        Content="Cancel"
+                                        Click="CancelDownloadModelButton_OnClick"
+                                        IsEnabled="False" />
+                                <TextBlock x:Name="DownloadLocalModelProgressText"
+                                           Grid.Row="1"
+                                           Grid.ColumnSpan="2"
+                                           Margin="0,6,0,0"
+                                           Style="{StaticResource SubtleTextStyle}"
+                                           FontSize="10.5"
+                                           TextWrapping="Wrap"
+                                           Text="Download progress will appear here." />
+                            </Grid>
+                        </StackPanel>
+
+                        <StackPanel x:Name="HostedCursivisSection"
+                                    Grid.Row="4"
+                                    Margin="0,12,0,0">
+                            <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Hosted Cursivis AI" />
+                            <TextBlock Margin="0,4,0,8"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Coming soon. Paid hosted Cursivis AI will be enabled after the production service, billing, license checks, and rate limits are live." />
+                            <Border Height="38"
+                                    Visibility="Collapsed"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="HostedApiUrlTextBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12.5"
+                                         TextWrapping="NoWrap" />
+                            </Border>
+                            <Border Height="38"
+                                    Visibility="Collapsed"
+                                    Margin="0,8,0,0"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <PasswordBox x:Name="HostedTokenBox"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Padding="12,0"
+                                             VerticalContentAlignment="Center"
+                                             Foreground="{DynamicResource Brush.InputForeground}"
+                                             CaretBrush="{DynamicResource Brush.InputForeground}"
+                                             FontFamily="Segoe UI Variable Text, Segoe UI"
+                                             FontSize="12.5" />
+                            </Border>
+                        </StackPanel>
+
+                        <TextBlock x:Name="AiBackendStatusText"
+                                   Grid.Row="5"
+                                   Margin="0,12,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Text="AI backend: Gemini/API mode is active by default." />
+                        <TextBlock x:Name="AiBackendHealthText"
+                                   Grid.Row="6"
+                                   Margin="0,6,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   TextWrapping="Wrap"
+                                   Text="Health: waiting for backend check." />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="8"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.CardGradient}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
+                        BorderThickness="1"
+                        Padding="16">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="18"
+                                          ShadowDepth="0"
+                                          Color="#33000000"
+                                          Opacity="0.18" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock x:Name="SelectedActionText"
+                                   Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="16"
+                                   Text="Selected action: Summarize" />
+                        <TextBlock x:Name="StatusText"
+                                   Margin="0,10,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   Text="Status: Ready. Press Trigger for text flow." />
+                    </StackPanel>
+                </Border>
+            </Grid>
+            </ScrollViewer>
+        </Border>
+    </Border>
+</Window>

@@ -1,0 +1,14 @@
+{
+  "name": "cursivis-browser-action-agent",
+  "version": "1.0.0",
+  "description": "Local Playwright browser executor for Cursivis take-action flows",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.53.0"
+  }
+}

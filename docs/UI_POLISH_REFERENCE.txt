@@ -1,0 +1,32 @@
+Cursivis UI polish reference
+============================
+
+Visual motifs requested for the premium desktop pass:
+
+1. Orb shader aesthetic
+- vivid magenta/cyan energy core
+- glassy dark background
+- hover/processing intensity
+- subtle rotational motion
+
+2. Star-border behavior
+- luminous border accents on cards/buttons
+- moving highlight sweep on hover
+
+3. Magic rings
+- one-time completion burst when AI result is ready
+- layered rings with cyan/magenta/gold tones
+
+4. Shiny text
+- animated loading/status text
+- silver/white sweep across muted text
+
+5. Split-text / reveal feel
+- result body should reveal progressively instead of popping in flat
+
+6. Glare-hover behavior
+- premium sheen on panels and controls
+
+Implementation note:
+- Source snippets were React/WebGL/CSS references from the product direction prompt.
+- Desktop companion is WPF, so the visuals were ported into native WPF styles, brushes, gradients, and storyboards rather than embedding the original React components directly.

@@ -1,0 +1,10 @@
+**/node_modules
+**/bin
+**/obj
+**/.vs
+**/.idea
+**/*.user
+**/*.suo
+.git
+.gitignore
+Resources

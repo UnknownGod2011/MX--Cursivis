@@ -1,0 +1,21 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yNyAzNmgxMmw2LThoMTBsNiA4aDEyYTkgOSAwIDAgMSA5IDl2MTlhOSA5IDAgMCAxLTkgOUgyN2E5IDkgMCAwIDEtOS05VjQ1YTkgOSAwIDAgMSA5LTlaIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iMTAiLz48cGF0aCBkPSJNMjcgMzZoMTJsNi04aDEwbDYgOGgxMmE5IDkgMCAwIDEgOSA5djE5YTkgOSAwIDAgMS05IDlIMjdhOSA5IDAgMCAxLTktOVY0NWE5IDkgMCAwIDEgOS05WiIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjUuMiIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iNTQiIHI9IjEyIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iMTAiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjU0IiByPSIxMiIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjUuMiIvPjxwYXRoIGQ9Ik0zMyA0N2gxMCIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjEwIi8+PHBhdGggZD0iTTMzIDQ3aDEwIiBzdHJva2U9IiMxNDE4MUQiIHN0cm9rZS13aWR0aD0iNS4yIi8+PC9zdmc+",
+      "imageFileName": "camera-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
+      "isVisible": true,
+      "itemType": "Image",
+      "area": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
+      }
+    }
+  ]
+}

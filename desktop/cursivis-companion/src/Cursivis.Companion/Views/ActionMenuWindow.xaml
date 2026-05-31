@@ -1,0 +1,153 @@
+<Window x:Class="Cursivis.Companion.Views.ActionMenuWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Choose Action"
+        Width="424"
+        Height="508"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResize"
+        MinWidth="400"
+        MinHeight="440"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True">
+    <Border Background="#E608111A"
+            BorderBrush="#55B6D7FF"
+            BorderThickness="1"
+            CornerRadius="24"
+            Padding="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30"
+                              ShadowDepth="0"
+                              Color="#B3000000"
+                              Opacity="0.82" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border CornerRadius="18"
+                    Background="#6D111B27"
+                    BorderBrush="#30FFFFFF"
+                    BorderThickness="1"
+                    Padding="14,12"
+                    MouseLeftButtonDown="HeaderCard_OnMouseLeftButtonDown">
+                <StackPanel>
+                    <TextBlock x:Name="HeaderText"
+                               Style="{StaticResource HeadlineTextStyle}"
+                               FontSize="20"
+                               Text="Choose action" />
+                    <TextBlock x:Name="SubtitleText"
+                               Margin="0,4,0,0"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="12"
+                               Text="Quick actions appear immediately. Gemini then adds smarter, context-aware options." />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1"
+                    Margin="0,14,0,12"
+                    CornerRadius="20"
+                    Background="#850D1620"
+                    BorderBrush="#2CFFFFFF"
+                    BorderThickness="1"
+                    Padding="12">
+                <ListBox x:Name="ActionList"
+                         Style="{StaticResource GlassListBoxStyle}"
+                         ItemContainerStyle="{StaticResource GlassListBoxItemStyle}"
+                         MouseDoubleClick="ActionList_OnMouseDoubleClick">
+                    <ListBox.Resources>
+                        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                    </ListBox.Resources>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                           FontSize="14"
+                                           Text="{Binding Title}" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Style="{StaticResource SubtleTextStyle}"
+                                           FontSize="11"
+                                           Text="{Binding Description}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <Border x:Name="ThinkingPanel"
+                    Grid.Row="2"
+                    Visibility="Collapsed"
+                    Margin="0,0,0,12"
+                    CornerRadius="16"
+                    Background="#7A111E2D"
+                    BorderBrush="#33B6D7FF"
+                    BorderThickness="1"
+                    Padding="12,10">
+                <StackPanel>
+                    <TextBlock x:Name="ThinkingText"
+                               Style="{StaticResource HeadlineTextStyle}"
+                               FontSize="12"
+                               Text="Gemini is thinking..." />
+                    <TextBlock x:Name="ThinkingSubtext"
+                               Margin="0,4,0,0"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="11"
+                               Text="Generating smarter, context-aware options for this selection." />
+                    <ProgressBar x:Name="ThinkingProgress"
+                                 Margin="0,10,0,0"
+                                 Height="6"
+                                 IsIndeterminate="True"
+                                 Foreground="#FF5EEBFF"
+                                 Background="#22151D27" />
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Thumb Grid.Column="0"
+                       Width="18"
+                       Height="18"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Bottom"
+                       Cursor="SizeNWSE"
+                       DragDelta="ResizeThumb_OnDragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Grid Width="18" Height="18">
+                                <Path Stroke="#66FFFFFF"
+                                      StrokeThickness="1.2"
+                                      Data="M2,16 L16,2 M8,16 L16,8 M12,16 L16,12" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Width="84"
+                            Height="38"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource MutedButtonStyle}"
+                            Content="Cancel"
+                            Click="Cancel_Click" />
+                    <Button Width="84"
+                            Height="38"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Content="Run"
+                            Click="Run_Click" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

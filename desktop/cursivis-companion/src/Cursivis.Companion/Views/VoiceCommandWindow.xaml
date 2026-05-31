@@ -1,0 +1,153 @@
+<Window x:Class="Cursivis.Companion.Views.VoiceCommandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Voice Command"
+        Width="500"
+        Height="360"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanResize"
+        MinWidth="440"
+        MinHeight="320"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Border Background="#E608111A"
+            BorderBrush="#55F562E7"
+            BorderThickness="1"
+            CornerRadius="24"
+            Padding="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30"
+                              ShadowDepth="0"
+                              Color="#B3000000"
+                              Opacity="0.82" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border CornerRadius="18"
+                    Background="#6D111B27"
+                    BorderBrush="#30FFFFFF"
+                    BorderThickness="1"
+                    Padding="14,12"
+                    MouseLeftButtonDown="HeaderCard_OnMouseLeftButtonDown">
+                <StackPanel>
+                    <Border x:Name="StateBadge"
+                            HorizontalAlignment="Left"
+                            Padding="10,5"
+                            CornerRadius="12"
+                            Background="#9920122A"
+                            BorderBrush="#66F562E7"
+                            BorderThickness="1">
+                        <TextBlock x:Name="StateBadgeText"
+                                   Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="11"
+                                   Foreground="#FFF6C9FF"
+                                   Text="Voice ready" />
+                    </Border>
+                    <TextBlock x:Name="HeaderText"
+                               Margin="0,10,0,0"
+                               Style="{StaticResource HeadlineTextStyle}"
+                               FontSize="20"
+                               Text="Voice Command" />
+                    <TextBlock x:Name="StatusText"
+                               Margin="0,6,0,0"
+                               Style="{StaticResource SubtleTextStyle}"
+                               FontSize="12"
+                               Text="Edit the spoken instruction if you want to be more specific before Cursivis runs it." />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1"
+                    Margin="0,14,0,0"
+                    CornerRadius="16"
+                    Background="#80111F2D"
+                    BorderBrush="#33F562E7"
+                    BorderThickness="1"
+                    Padding="12,8">
+                <TextBlock Style="{StaticResource SubtleTextStyle}"
+                           FontSize="11"
+                           Text="Type or refine the command below if needed." />
+            </Border>
+
+            <TextBox x:Name="CommandTextBox"
+                     Grid.Row="2"
+                     Margin="0,12,0,0"
+                     MinHeight="110"
+                     Style="{StaticResource GlassTextBoxStyle}"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
+                     VerticalContentAlignment="Top" />
+
+            <Grid Grid.Row="3"
+                  Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Thumb Grid.Column="0"
+                       Width="18"
+                       Height="18"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Bottom"
+                       Cursor="SizeNWSE"
+                       DragDelta="ResizeThumb_OnDragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Grid Width="18" Height="18">
+                                <Path Stroke="#66FFFFFF"
+                                      StrokeThickness="1.2"
+                                      Data="M2,16 L16,2 M8,16 L16,8 M12,16 L16,12" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+                <StackPanel Grid.Column="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Width="84"
+                        Height="38"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource MutedButtonStyle}"
+                        Content="Cancel"
+                        Click="Cancel_Click" />
+                <Button Width="84"
+                        Height="38"
+                        Style="{StaticResource GlassButtonStyle}"
+                        Content="Run"
+                        Click="Run_Click" />
+                </StackPanel>
+                <Thumb Grid.Column="3"
+                       Width="18"
+                       Height="18"
+                       Margin="10,0,0,0"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Bottom"
+                       Cursor="SizeNWSE"
+                       DragDelta="ResizeThumb_OnDragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Grid Width="18" Height="18">
+                                <Path Stroke="#99FFFFFF"
+                                      StrokeThickness="1.2"
+                                      Data="M2,16 L16,2 M8,16 L16,8 M12,16 L16,12" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

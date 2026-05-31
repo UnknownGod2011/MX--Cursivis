@@ -1,0 +1,21 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik01MCAyMGMtNi42IDAtMTIgNS40LTEyIDEydjE2YzAgNi42IDUuNCAxMiAxMiAxMnMxMi01LjQgMTItMTJWMzJjMC02LjYtNS40LTEyLTEyLTEyWiIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjEyIi8+PHBhdGggZD0iTTUwIDIwYy02LjYgMC0xMiA1LjQtMTIgMTJ2MTZjMCA2LjYgNS40IDEyIDEyIDEyczEyLTUuNCAxMi0xMlYzMmMwLTYuNi01LjQtMTItMTItMTJaIiBzdHJva2U9IiMxNDE4MUQiIHN0cm9rZS13aWR0aD0iNiIvPjxwYXRoIGQ9Ik0zMCA0NnYzYzAgMTEgOSAyMCAyMCAyMHMyMC05IDIwLTIwdi0zIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iMTIiLz48cGF0aCBkPSJNMzAgNDZ2M2MwIDExIDkgMjAgMjAgMjBzMjAtOSAyMC0yMHYtMyIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjYiLz48cGF0aCBkPSJNNTAgNjl2MTEiIHN0cm9rZT0iI0Y1RjdGQSIgc3Ryb2tlLXdpZHRoPSIxMiIvPjxwYXRoIGQ9Ik01MCA2OXYxMSIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjYiLz48cGF0aCBkPSJNNDAgODBoMjAiIHN0cm9rZT0iI0Y1RjdGQSIgc3Ryb2tlLXdpZHRoPSIxMiIvPjxwYXRoIGQ9Ik00MCA4MGgyMCIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjYiLz48L3N2Zz4=",
+      "imageFileName": "mic-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
+      "isVisible": true,
+      "itemType": "Image",
+      "area": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
+      }
+    }
+  ]
+}

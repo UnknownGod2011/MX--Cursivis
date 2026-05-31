@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920" role="img" aria-labelledby="title desc">
+  <title id="title">Cursivis Architecture Diagram</title>
+  <desc id="desc">High-level architecture of the Cursivis multimodal cursor-native agent system.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="100%" stop-color="#0f1727"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#122238"/>
+      <stop offset="100%" stop-color="#0d1828"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#67e8f9"/>
+    </marker>
+    <style>
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .subtitle { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #cbd5e1; }
+      .section { font: 700 21px 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .body { font: 15px 'Segoe UI', Arial, sans-serif; fill: #cbd5e1; }
+      .small { font: 14px 'Segoe UI', Arial, sans-serif; fill: #93c5fd; }
+      .box { fill: url(#panel); stroke: #22324d; stroke-width: 2; rx: 24; ry: 24; filter: url(#shadow); }
+      .pill { fill: #0b1320; stroke: #30415f; stroke-width: 1.5; rx: 999; ry: 999; }
+      .line { stroke: #67e8f9; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #a78bfa; stroke-width: 3; fill: none; marker-end: url(#arrow); opacity: 0.9; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="920" fill="url(#bg)"/>
+  <rect x="34" y="30" width="1532" height="860" rx="32" ry="32" fill="none" stroke="url(#accent)" stroke-width="2" opacity="0.55"/>
+
+  <text x="70" y="88" class="title">Cursivis Architecture</text>
+  <text x="70" y="122" class="subtitle">Selection = Context, Trigger = Intent, Gemini = Intelligence</text>
+
+  <rect x="70" y="165" width="330" height="250" class="box"/>
+  <text x="100" y="208" class="section">User Input Surface</text>
+  <rect x="98" y="230" width="272" height="42" class="pill"/>
+  <text x="118" y="257" class="label">MX Creative Console / Trigger</text>
+  <rect x="98" y="286" width="272" height="42" class="pill"/>
+  <text x="118" y="313" class="label">Text Selection / Clipboard</text>
+  <rect x="98" y="342" width="272" height="42" class="pill"/>
+  <text x="118" y="369" class="label">Lasso Image / Screenshot</text>
+  <text x="100" y="398" class="body">Optional voice input, screenshots, and image-only flows all start here.</text>
+
+  <rect x="470" y="165" width="420" height="340" class="box"/>
+  <text x="500" y="208" class="section">Windows Companion App</text>
+  <text x="500" y="244" class="label">WPF desktop orchestrator</text>
+  <text x="500" y="276" class="body">- Captures text, lasso region, and fallback screen context</text>
+  <text x="500" y="304" class="body">- Shows orb, result panel, guided menu, and voice UI</text>
+  <text x="500" y="332" class="body">- Sends multimodal requests to Gemini backend</text>
+  <text x="500" y="360" class="body">- Applies safe insert/replace flows locally</text>
+  <text x="500" y="388" class="body">- Invokes Take Action only after user confirmation</text>
+  <text x="500" y="434" class="small">desktop/cursivis-companion</text>
+
+  <rect x="960" y="165" width="500" height="340" class="box"/>
+  <text x="990" y="208" class="section">Gemini Backend on Google Cloud</text>
+  <text x="990" y="244" class="label">Node.js service on Cloud Run</text>
+  <text x="990" y="276" class="body">- Smart-mode contextual reasoning with Gemini</text>
+  <text x="990" y="304" class="body">- Guided-mode dynamic option generation</text>
+  <text x="990" y="332" class="body">- Image + text multimodal understanding</text>
+  <text x="990" y="360" class="body">- Voice transcription and live interaction support</text>
+  <text x="990" y="388" class="body">- Browser action planning for forms, email, and UI tasks</text>
+  <text x="990" y="416" class="body">- Health endpoint and deployable Docker image</text>
+  <text x="990" y="462" class="small">backend/gemini-agent + Google GenAI SDK + Cloud Run</text>
+
+  <rect x="70" y="555" width="500" height="250" class="box"/>
+  <text x="100" y="598" class="section">Current Browser Execution Layer</text>
+  <text x="100" y="634" class="label">Chromium extension + localhost bridge</text>
+  <text x="100" y="666" class="body">- Runs inside the user's real logged-in browser tab</text>
+  <text x="100" y="694" class="body">- Reads DOM context and executes planned UI actions</text>
+  <text x="100" y="722" class="body">- Supports fill, click, select, reply, answer-key, and tab actions</text>
+  <text x="100" y="750" class="small">desktop/browser-extension-chromium + desktop/browser-native-host</text>
+
+  <rect x="650" y="555" width="420" height="250" class="box"/>
+  <text x="680" y="598" class="section">Fallback Automation Layer</text>
+  <text x="680" y="634" class="label">Managed browser + local browser agent</text>
+  <text x="680" y="666" class="body">- Playwright-driven managed browser for demo-safe fallback</text>
+  <text x="680" y="694" class="body">- Handles pages where current-tab bridge is unavailable</text>
+  <text x="680" y="722" class="small">desktop/browser-action-agent</text>
+
+  <rect x="1150" y="555" width="310" height="250" class="box"/>
+  <text x="1180" y="598" class="section">Outputs</text>
+  <text x="1180" y="634" class="body">- Result panel + clipboard copy</text>
+  <text x="1180" y="662" class="body">- Optional insert / replace</text>
+  <text x="1180" y="690" class="body">- Optional Take Action in browser</text>
+  <text x="1180" y="718" class="body">- Logitech feedback + orb states</text>
+
+  <path d="M400 290 C440 290 430 290 470 290" class="line"/>
+  <path d="M890 290 C925 290 925 290 960 290" class="line"/>
+  <path d="M1210 505 C1210 535 1210 535 1210 555" class="line-soft"/>
+  <path d="M840 505 C840 535 820 535 820 555" class="line-soft"/>
+  <path d="M670 390 C440 520 360 555 320 555" class="line-soft"/>
+  <path d="M1030 390 C990 520 950 555 900 555" class="line-soft"/>
+
+  <rect x="1290" y="76" width="214" height="36" rx="18" ry="18" fill="#08111d" stroke="#21405f" stroke-width="1.5"/>
+  <circle cx="1317" cy="94" r="6" fill="#67e8f9"/>
+  <text x="1332" y="100" class="body">Judge-friendly deployment target</text>
+</svg>

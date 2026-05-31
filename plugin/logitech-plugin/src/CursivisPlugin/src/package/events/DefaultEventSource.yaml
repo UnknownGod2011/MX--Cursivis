@@ -1,0 +1,13 @@
+events:
+  - name: action_change
+    displayName: Action Change
+    description: Triggered when Cursivis changes the selected action.
+  - name: action_execute
+    displayName: Action Execute
+    description: Triggered when Cursivis executes the selected action.
+  - name: processing_start
+    displayName: Processing Start
+    description: Triggered when Cursivis begins processing.
+  - name: processing_complete
+    displayName: Processing Complete
+    description: Triggered when Cursivis completes processing.
