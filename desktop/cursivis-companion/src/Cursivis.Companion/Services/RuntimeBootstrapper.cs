@@ -68,11 +68,7 @@ public sealed class RuntimeBootstrapper
         };
         AddProviderEnvironment(environment, profile);
 
-        var commandParts = new List<string>();
-        commandParts.Add($"Set-Location -LiteralPath '{EscapeForSingleQuotedPowerShell(profile.BackendDir)}'");
-        commandParts.Add(BuildNpmStartCommand(profile, profile.BackendDir));
-
-        StartHiddenPowerShell([.. commandParts], environment);
+        StartNodeServer(profile, profile.BackendDir, environment);
         await WaitForHealthyAsync($"{profile.BackendUrl.TrimEnd('/')}/health", TimeSpan.FromSeconds(30), cancellationToken);
     }
 
@@ -88,11 +84,9 @@ public sealed class RuntimeBootstrapper
             return;
         }
 
-        StartHiddenPowerShell(
-            [
-                $"Set-Location -LiteralPath '{EscapeForSingleQuotedPowerShell(profile.BrowserAgentDir)}'",
-                BuildNpmStartCommand(profile, profile.BrowserAgentDir)
-            ],
+        StartNodeServer(
+            profile,
+            profile.BrowserAgentDir,
             new Dictionary<string, string> { ["CURSIVIS_BROWSER_CHANNEL"] = "chrome" });
 
         await WaitForHealthyAsync($"{profile.BrowserAgentUrl.TrimEnd('/')}/health", TimeSpan.FromSeconds(20), cancellationToken);
@@ -124,13 +118,20 @@ public sealed class RuntimeBootstrapper
         await WaitForHealthyAsync($"{profile.ExtensionBridgeUrl.TrimEnd('/')}/health", TimeSpan.FromSeconds(15), cancellationToken);
     }
 
-    private static void StartHiddenPowerShell(string[] commandParts, IReadOnlyDictionary<string, string>? environment = null)
+    private static void StartNodeServer(RuntimeLaunchProfile profile, string projectDir, IReadOnlyDictionary<string, string>? environment = null)
     {
-        var command = string.Join("; ", commandParts);
+        var nodeExe = TryResolvePortableNodeExe(profile, projectDir) ?? "node";
+        var serverJs = Path.Combine(projectDir, "src", "server.js");
+        if (!File.Exists(serverJs))
+        {
+            return;
+        }
+
         var psi = new ProcessStartInfo
         {
-            FileName = "powershell",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+            FileName = nodeExe,
+            Arguments = $"\"{serverJs}\"",
+            WorkingDirectory = projectDir,
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden
@@ -147,30 +148,14 @@ public sealed class RuntimeBootstrapper
         Process.Start(psi);
     }
 
-    private static string BuildNpmStartCommand(RuntimeLaunchProfile profile, string projectDir)
-    {
-        var portableNodeDir = TryResolvePortableNodeDir(profile, projectDir);
-        if (!string.IsNullOrWhiteSpace(portableNodeDir))
-        {
-            var nodeExe = Path.Combine(portableNodeDir, "node.exe");
-            var npmCli = Path.Combine(portableNodeDir, "node_modules", "npm", "bin", "npm-cli.js");
-            if (File.Exists(nodeExe) && File.Exists(npmCli))
-            {
-                return $"& '{EscapeForSingleQuotedPowerShell(nodeExe)}' '{EscapeForSingleQuotedPowerShell(npmCli)}' start";
-            }
-        }
-
-        return "npm start";
-    }
-
-    private static string? TryResolvePortableNodeDir(RuntimeLaunchProfile profile, string projectDir)
+    private static string? TryResolvePortableNodeExe(RuntimeLaunchProfile profile, string projectDir)
     {
         foreach (var root in CandidateRuntimeRoots(profile, projectDir))
         {
-            var nodeDir = Path.Combine(root, "node");
-            if (File.Exists(Path.Combine(nodeDir, "node.exe")))
+            var nodeExe = Path.Combine(root, "node", "node.exe");
+            if (File.Exists(nodeExe))
             {
-                return nodeDir;
+                return nodeExe;
             }
         }
 
@@ -331,8 +316,4 @@ public sealed class RuntimeBootstrapper
         }
     }
 
-    private static string EscapeForSingleQuotedPowerShell(string value)
-    {
-        return value.Replace("'", "''");
-    }
 }

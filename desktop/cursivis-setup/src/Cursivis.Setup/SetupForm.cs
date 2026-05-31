@@ -177,6 +177,7 @@ public sealed class SetupForm : Form
         }
 
         SetStatus("Step 3 of 5: Installing runtime files", "Copying Cursivis into your local app data folder.");
+        StopInstalledRuntimeProcesses(installRoot);
         CopyDirectory(payloadRoot, installRoot);
 
         SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies. This is the longest first-time step.");
@@ -319,6 +320,56 @@ public sealed class SetupForm : Form
             var target = file.Replace(source, destination);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);
+        }
+    }
+
+    private void StopInstalledRuntimeProcesses(string installRoot)
+    {
+        if (!Directory.Exists(installRoot))
+        {
+            return;
+        }
+
+        var normalizedRoot = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var currentProcessId = Environment.ProcessId;
+
+        foreach (var process in Process.GetProcesses())
+        {
+            if (process.Id == currentProcessId)
+            {
+                continue;
+            }
+
+            string? path = null;
+            try
+            {
+                path = process.MainModule?.FileName;
+            }
+            catch
+            {
+                // Some system processes deny module access. They are unrelated to Cursivis setup.
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            if (!Path.GetFullPath(path).StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                Log("Stopping previous runtime process: " + process.ProcessName);
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+            catch
+            {
+                // If Windows already closed the process or access is denied, continue the install.
+            }
         }
     }
 
