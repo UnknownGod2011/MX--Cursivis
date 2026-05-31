@@ -99,38 +99,39 @@ public sealed class RuntimeBootstrapper
             return;
         }
 
-        var launchCmd = Path.Combine(profile.ExtensionBridgeDir, "launch.cmd");
-        if (!File.Exists(launchCmd))
+        var hostJs = Path.Combine(profile.ExtensionBridgeDir, "src", "host.js");
+        if (!File.Exists(hostJs))
         {
             return;
         }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"{launchCmd}\"",
-            WorkingDirectory = profile.ExtensionBridgeDir,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        Process.Start(psi);
+        StartNodeScript(profile, profile.ExtensionBridgeDir, hostJs);
         await WaitForHealthyAsync($"{profile.ExtensionBridgeUrl.TrimEnd('/')}/health", TimeSpan.FromSeconds(15), cancellationToken);
     }
 
     private static void StartNodeServer(RuntimeLaunchProfile profile, string projectDir, IReadOnlyDictionary<string, string>? environment = null)
     {
-        var nodeExe = TryResolvePortableNodeExe(profile, projectDir) ?? "node";
         var serverJs = Path.Combine(projectDir, "src", "server.js");
         if (!File.Exists(serverJs))
         {
             return;
         }
 
+        StartNodeScript(profile, projectDir, serverJs, environment);
+    }
+
+    private static void StartNodeScript(
+        RuntimeLaunchProfile profile,
+        string projectDir,
+        string scriptPath,
+        IReadOnlyDictionary<string, string>? environment = null)
+    {
+        var nodeExe = TryResolvePortableNodeExe(profile, projectDir) ?? "node";
+
         var psi = new ProcessStartInfo
         {
             FileName = nodeExe,
-            Arguments = $"\"{serverJs}\"",
+            Arguments = $"\"{scriptPath}\"",
             WorkingDirectory = projectDir,
             UseShellExecute = false,
             CreateNoWindow = true,
