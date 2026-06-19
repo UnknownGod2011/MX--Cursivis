@@ -6,6 +6,7 @@ import {
 } from "./geminiService.js";
 import { isQuestionText, looksLikeCode } from "./contentClassifier.js";
 import os from "node:os";
+import sharp from "sharp";
 
 const PROVIDER_ALIASES = new Map([
   ["gemini", "gemini"],
@@ -210,10 +211,11 @@ function createLocalOllamaProvider(env) {
     async generateText(request) {
       const startedAt = Date.now();
       const localRequest = normalizeLocalRequestForReliability(request);
-      const messages = toOllamaMessages(localRequest);
+      const messages = await toOllamaMessages(localRequest);
+      const hasImage = hasInlineImage(localRequest);
       const options = {
         temperature: Number(localRequest.config?.temperature ?? 0.12),
-        num_ctx: localDefaults.numCtx,
+        num_ctx: hasImage ? Math.max(localDefaults.numCtx, localDefaults.imageNumCtx) : localDefaults.numCtx,
         num_thread: localDefaults.numThread
       };
       const numPredict = Number(localRequest.config?.numPredict ?? localRequest.config?.maxOutputTokens ?? localDefaults.numPredict);
@@ -239,7 +241,7 @@ function createLocalOllamaProvider(env) {
         const retry = await postOllamaChat({
           baseUrl,
           model: localRequest.modelOverride || model,
-          messages: toOllamaMessages({
+          messages: await toOllamaMessages({
             ...localRequest,
             prompt: buildLocalNonCodeRetryPrompt(localRequest, normalized.text),
             contents: undefined
@@ -263,7 +265,7 @@ function createLocalOllamaProvider(env) {
         const retry = await postOllamaChat({
           baseUrl,
           model: localRequest.modelOverride || model,
-          messages: toOllamaMessages({
+          messages: await toOllamaMessages({
             ...localRequest,
             action: "answer_question",
             selectionType: "question",
@@ -289,7 +291,7 @@ function createLocalOllamaProvider(env) {
         const retry = await postOllamaChat({
           baseUrl,
           model: localRequest.modelOverride || model,
-          messages: toOllamaMessages(buildLocalImageRetryRequest(localRequest, normalized.text)),
+          messages: await toOllamaMessages(buildLocalImageRetryRequest(localRequest, normalized.text)),
           think,
           keepAlive,
           options: {
@@ -361,7 +363,7 @@ function normalizeTextResponse(response, fallbackModel, startedAt) {
   };
 }
 
-function toOllamaMessages(request) {
+async function toOllamaMessages(request) {
   const systemMessage = {
     role: "system",
     content: buildLocalOllamaSystemInstruction(request)
@@ -370,23 +372,24 @@ function toOllamaMessages(request) {
   if (Array.isArray(request.contents)) {
     return [
       systemMessage,
-      ...request.contents.map((entry) => {
+      ...await Promise.all(request.contents.map(async (entry) => {
       const parts = Array.isArray(entry.parts) ? entry.parts : [];
       const text = parts
         .map((part) => part.text)
         .filter(Boolean)
         .join("\n\n")
         .trim();
-      const images = parts
+      const rawImages = parts
         .map((part) => part.inlineData?.data)
         .filter(Boolean);
+      const images = await Promise.all(rawImages.map(normalizeLocalImageBase64));
 
       return {
         role: entry.role || "user",
         content: text || "Analyze the provided content.",
         ...(images.length > 0 ? { images } : {})
       };
-      })
+      }))
     ];
   }
 
@@ -397,6 +400,43 @@ function toOllamaMessages(request) {
       content: String(request.prompt || "").trim()
     }
   ];
+}
+
+async function normalizeLocalImageBase64(imageBase64) {
+  const input = Buffer.from(String(imageBase64 || ""), "base64");
+  if (input.length === 0) {
+    throw new Error("Local image input is empty.");
+  }
+
+  if (input.length > 24 * 1024 * 1024) {
+    throw new Error("Local image input is too large. Select a smaller region and try again.");
+  }
+
+  try {
+    const output = await sharp(input, {
+      failOn: "none",
+      limitInputPixels: 40_000_000
+    })
+      .rotate()
+      .flatten({ background: "#ffffff" })
+      .resize({
+        width: 384,
+        height: 384,
+        fit: "inside",
+        withoutEnlargement: true
+      })
+      .jpeg({
+        quality: 78,
+        chromaSubsampling: "4:4:4",
+        mozjpeg: true
+      })
+      .toBuffer();
+
+    return output.toString("base64");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Local image optimization failed: ${message}`);
+  }
 }
 
 function toOpenAiMessages(request) {
@@ -436,6 +476,14 @@ function toOpenAiMessages(request) {
   ];
 }
 
+function hasInlineImage(request) {
+  return Array.isArray(request.contents) &&
+    request.contents.some((entry) =>
+      Array.isArray(entry?.parts) &&
+      entry.parts.some((part) => Boolean(part?.inlineData?.data))
+    );
+}
+
 function normalizeOpenAiUsage(usage) {
   if (!usage) {
     return undefined;
@@ -461,6 +509,8 @@ function buildLocalOllamaDefaults(env, model) {
   return {
     numCtx: parsePositiveInteger(env.CURSIVIS_LOCAL_NUM_CTX ?? env.OLLAMA_NUM_CTX)
       ?? (workstationModel ? 6144 : qualityEdgeModel ? 3072 : 2048),
+    imageNumCtx: parsePositiveInteger(env.CURSIVIS_LOCAL_IMAGE_NUM_CTX)
+      ?? 8192,
     numPredict: parsePositiveInteger(env.CURSIVIS_LOCAL_NUM_PREDICT ?? env.OLLAMA_NUM_PREDICT)
       ?? (workstationModel ? 768 : qualityEdgeModel ? 384 : 256),
     numThread: parsePositiveInteger(env.CURSIVIS_LOCAL_NUM_THREAD ?? env.OLLAMA_NUM_THREAD)

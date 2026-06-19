@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import request from "supertest";
+import sharp from "sharp";
 import { createAiProviderFromEnv, normalizeProviderId } from "../src/aiProviderFactory.js";
 import { createApp } from "../src/app.js";
 import { createBrowserActionPlanner } from "../src/browserActionPlanner.js";
@@ -234,6 +235,61 @@ test("local model provider sends supported local models through the same Ollama 
     assert.ok(requests.every((body) => body.messages.some((message) => Array.isArray(message.images) && message.images.length === 1)));
     assert.ok(requests.every((body) => /look for readable text/i.test(body.messages[0].content)));
     assert.ok(requests.every((body) => /Do not merely say there is text on a background/i.test(body.messages[0].content)));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("local model provider normalizes large images before sending them to Ollama", async () => {
+  const originalFetch = globalThis.fetch;
+  let sentImage = "";
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    sentImage = body.messages.find((message) => Array.isArray(message.images))?.images?.[0] || "";
+    return new Response(JSON.stringify({
+      model: body.model,
+      message: { content: "The screenshot contains readable interface text." }
+    }), { status: 200 });
+  };
+
+  try {
+    const largePng = await sharp({
+      create: {
+        width: 1800,
+        height: 1200,
+        channels: 3,
+        background: "#f7f7f7"
+      }
+    }).png({ compressionLevel: 0 }).toBuffer();
+    const provider = createAiProviderFromEnv({
+      CURSIVIS_AI_PROVIDER: "local_ollama",
+      CURSIVIS_LOCAL_MODEL: "granite3.2-vision:2b"
+    });
+
+    await provider.generateText({
+      action: "extract_key_details",
+      selectionType: "image",
+      contents: [{
+        role: "user",
+        parts: [
+          { text: "Read the useful details." },
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: largePng.toString("base64")
+            }
+          }
+        ]
+      }]
+    });
+
+    assert.ok(sentImage);
+    const optimized = Buffer.from(sentImage, "base64");
+    const metadata = await sharp(optimized).metadata();
+    assert.equal(metadata.format, "jpeg");
+    assert.ok(metadata.width <= 384);
+    assert.ok(metadata.height <= 384);
+    assert.ok(optimized.length < largePng.length);
   } finally {
     globalThis.fetch = originalFetch;
   }

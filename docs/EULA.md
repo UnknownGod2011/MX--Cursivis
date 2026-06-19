@@ -1,8 +1,8 @@
 # Cursivis End User License Agreement
 
-Effective date: May 27, 2026
+Effective date: June 13, 2026
 
-This End User License Agreement governs use of Cursivis, including the Logitech plugin, Cursivis Companion app, local backend services, browser workflow tools, and related documentation.
+This End User License Agreement governs use of Cursivis, including the Logitech plugin, Cursivis Companion app, Cursivis Live Mode, local backend services, browser workflow tools, and related documentation.
 
 ## License
 
@@ -16,6 +16,7 @@ You are responsible for:
 - Reviewing AI-generated output before relying on it.
 - Ensuring that your use of browser automation, form filling, email drafting, translation, summarization, and local model downloads complies with applicable laws and third-party terms.
 - Maintaining the security of your own API keys, accounts, local computer, and models.
+- Reviewing and confirming Live Mode actions before allowing them to affect applications, files, browser tabs, or Windows settings.
 
 ## AI Output
 
@@ -24,6 +25,12 @@ Cursivis uses AI systems that may produce inaccurate, incomplete, or unexpected 
 ## Local Models And Third-Party Services
 
 Local LLM mode may use third-party local runtimes such as Ollama and third-party open-weight models. API LLM mode uses the AI provider configured by the user. Those third-party products and services are governed by their own licenses, terms, and privacy policies.
+
+## Live Mode
+
+Cursivis Live Mode streams microphone audio to Google's Gemini Live API while the user has an active session. It may propose or perform supported actions on the user's computer. Auto Execute is the default for routine actions; users can enable Require Confirmation in Settings. Explicit one-shot screen/camera actions are visibly reported, and irreversible system actions require confirmation. Users remain responsible for requested actions and can stop Live Mode at any time.
+
+Live Mode is intended for user-directed productivity. It does not guarantee successful control of every application or website, and it must not be used to bypass access controls or perform unauthorized actions.
 
 ## Prohibited Use
 

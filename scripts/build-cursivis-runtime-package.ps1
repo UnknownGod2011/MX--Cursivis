@@ -1,8 +1,9 @@
 param(
-    [string]$Version = "1_4",
+    [string]$Version = "1_5_0",
     [string]$NodeVersion = "v22.22.0",
     [switch]$SkipDotnetPublish,
-    [switch]$SkipZip
+    [switch]$SkipZip,
+    [switch]$SkipPluginPackage
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,10 +19,47 @@ $hotkeyProject = Join-Path $root "desktop\cursivis-hotkey-host\src\Cursivis.Hotk
 $triggerProject = Join-Path $root "desktop\cursivis-trigger-launcher\src\Cursivis.TriggerLauncher\Cursivis.TriggerLauncher.csproj"
 $backendDir = Join-Path $root "backend\gemini-agent"
 $browserAgentDir = Join-Path $root "desktop\browser-action-agent"
+$browserExtensionDir = Join-Path $root "desktop\browser-extension-chromium"
 $extensionBridgeDir = Join-Path $root "desktop\browser-native-host"
 $sharedDir = Join-Path $root "shared"
 $docsDir = Join-Path $root "docs"
 $pluginPackage = Join-Path $root "artifacts\logitech-marketplace\Cursivis_$Version.lplug4"
+
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "'$FilePath' failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Assert-ForbiddenFilesAbsentFromPackage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Package
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Package))
+    try {
+        $matches = @($archive.Entries | Where-Object {
+            $fileName = [System.IO.Path]::GetFileName($_.FullName)
+            $fileName -ieq "PluginApi.dll" -or $fileName.EndsWith(".pdb", [System.StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($matches.Count -gt 0) {
+            throw "Refusing to include a Logitech plugin package that contains PluginApi.dll or debug symbols."
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
 
 function Copy-CleanDirectory {
     param(
@@ -54,27 +92,55 @@ if (Test-Path -LiteralPath $packageRoot) {
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 
 if (-not $SkipDotnetPublish) {
-    dotnet publish $companionProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o (Join-Path $runtimeRoot "app\companion")
-    dotnet publish $hotkeyProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o (Join-Path $runtimeRoot "app\hotkey-host")
-    dotnet publish $triggerProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o (Join-Path $runtimeRoot "app\trigger-launcher")
+    Invoke-NativeCommand -FilePath "dotnet" -Arguments @(
+        "publish", $companionProject, "-c", "Release", "-r", "win-x64",
+        "--self-contained", "true", "-p:PublishSingleFile=true",
+        "-p:EnableCompressionInSingleFile=true", "-p:DebugType=None",
+        "-p:DebugSymbols=false", "-o", (Join-Path $runtimeRoot "app\companion"))
+    Invoke-NativeCommand -FilePath "dotnet" -Arguments @(
+        "publish", $hotkeyProject, "-c", "Release", "-r", "win-x64",
+        "--self-contained", "true", "-p:PublishSingleFile=true",
+        "-p:EnableCompressionInSingleFile=true", "-p:DebugType=None",
+        "-p:DebugSymbols=false", "-o", (Join-Path $runtimeRoot "app\hotkey-host"))
+    Invoke-NativeCommand -FilePath "dotnet" -Arguments @(
+        "publish", $triggerProject, "-c", "Release", "-r", "win-x64",
+        "--self-contained", "true", "-p:PublishSingleFile=true",
+        "-p:EnableCompressionInSingleFile=true", "-p:DebugType=None",
+        "-p:DebugSymbols=false", "-o", (Join-Path $runtimeRoot "app\trigger-launcher"))
 }
 
-Copy-CleanDirectory -Source $backendDir -Destination (Join-Path $runtimeRoot "backend\gemini-agent") -Exclude @("node_modules")
-Copy-CleanDirectory -Source $browserAgentDir -Destination (Join-Path $runtimeRoot "desktop\browser-action-agent") -Exclude @("node_modules")
+Copy-CleanDirectory -Source $backendDir -Destination (Join-Path $runtimeRoot "backend\gemini-agent") -Exclude @(
+    "node_modules",
+    "tests",
+    "infra",
+    ".env.example",
+    "Dockerfile",
+    "README.md"
+)
+Copy-CleanDirectory -Source $browserAgentDir -Destination (Join-Path $runtimeRoot "desktop\browser-action-agent") -Exclude @(
+    "node_modules",
+    "README.md"
+)
+Copy-CleanDirectory -Source $browserExtensionDir -Destination (Join-Path $runtimeRoot "desktop\browser-extension-chromium")
 Copy-CleanDirectory -Source $extensionBridgeDir -Destination (Join-Path $runtimeRoot "desktop\browser-native-host")
 Copy-CleanDirectory -Source $sharedDir -Destination (Join-Path $runtimeRoot "shared")
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.cmd") -Destination $packageRoot -Force
 
-if (Test-Path -LiteralPath $pluginPackage) {
+if (-not $SkipPluginPackage) {
+    if (-not (Test-Path -LiteralPath $pluginPackage)) {
+        throw "Matching Logitech plugin package was not found: $pluginPackage"
+    }
+
+    Assert-ForbiddenFilesAbsentFromPackage -Package $pluginPackage
     Copy-Item -LiteralPath $pluginPackage -Destination (Join-Path $packageRoot "Cursivis_$Version.lplug4") -Force
 }
 
 if (Test-Path -LiteralPath $docsDir) {
     $packageDocsDir = Join-Path $packageRoot "docs"
     New-Item -ItemType Directory -Force -Path $packageDocsDir | Out-Null
-    foreach ($docName in @("PRIVACY_POLICY.md", "EULA.md", "MARKETPLACE_SUBMISSION_CHECKLIST.md", "MARKETPLACE_READINESS.md")) {
+    foreach ($docName in @("PRIVACY_POLICY.md", "EULA.md", "LIVE_MODE_MARKETPLACE_REVIEW.md", "MARKETPLACE_SUBMISSION_CHECKLIST.md", "MARKETPLACE_READINESS.md")) {
         $docPath = Join-Path $docsDir $docName
         if (Test-Path -LiteralPath $docPath) {
             Copy-Item -LiteralPath $docPath -Destination (Join-Path $packageDocsDir $docName) -Force
@@ -89,9 +155,13 @@ Cursivis Runtime Setup
 2. Run install-cursivis-runtime.cmd.
 3. Cursivis Companion opens automatically.
 4. Paste your Gemini API keys in API LLM mode, or choose Local LLM and click Download & Use.
+5. Add Cursivis Live Mode to Actions Ring for permission-aware voice control.
 
 This runtime package does not include any private API keys or local model weights.
 Local LLM setup downloads models only after the user chooses that option.
+Live Mode uses the user's saved Gemini API key pool. Routine actions use Auto Execute by default; Require Confirmation remains available in Settings.
+Advanced control of an already-open Chromium tab uses the included browser extension.
+Chromium requires the user to approve that extension; basic Cursivis and managed-browser workflows do not require it.
 Privacy policy, EULA, and Marketplace submission notes are included in the docs folder.
 "@ | Set-Content -LiteralPath (Join-Path $packageRoot "README.txt") -Encoding UTF8
 

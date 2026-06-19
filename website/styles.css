@@ -40,11 +40,12 @@ a {
 }
 
 .hero {
-  min-height: calc(100vh - 56px);
+  min-height: min(760px, calc(100vh - 56px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: 42px;
   align-items: center;
+  padding: 64px 0 48px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -54,12 +55,23 @@ a {
   gap: 12px;
   color: var(--cyan);
   font-weight: 700;
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .brand-icon {
   width: 44px;
   height: 44px;
+}
+
+.brand-row div {
+  display: grid;
+  gap: 2px;
+}
+
+.brand-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 h1,
@@ -72,8 +84,8 @@ p {
 h1 {
   max-width: 720px;
   margin-bottom: 18px;
-  font-size: clamp(42px, 7vw, 82px);
-  line-height: 0.95;
+  font-size: 64px;
+  line-height: 1;
   letter-spacing: 0;
 }
 
@@ -82,6 +94,14 @@ h1 {
   color: var(--muted);
   font-size: 20px;
   line-height: 1.55;
+}
+
+.eyebrow {
+  margin-bottom: 10px;
+  color: var(--rose);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .actions {
@@ -115,10 +135,36 @@ h1 {
   color: var(--text);
 }
 
+.download-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.download-meta span {
+  position: relative;
+}
+
+.download-meta span + span::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
 .security-note {
   max-width: 640px;
   color: #d4dae3;
   font-size: 14px;
+  line-height: 1.5;
 }
 
 .status-panel {
@@ -126,6 +172,19 @@ h1 {
   background: var(--panel);
   border-radius: 8px;
   padding: 18px;
+}
+
+.status-panel h2 {
+  margin-bottom: 10px;
+  font-size: 24px;
+}
+
+.panel-kicker {
+  margin-bottom: 6px;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .step {
@@ -167,7 +226,29 @@ h1 {
   line-height: 1.45;
 }
 
+.recommendation-band {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+  gap: 36px;
+  align-items: center;
+  padding: 36px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.recommendation-band h2 {
+  margin-bottom: 0;
+  font-size: 28px;
+}
+
+.recommendation-band > p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
 .setup-band,
+.live-mode-band,
 .support-band,
 .manual-band {
   padding: 42px 0;
@@ -175,6 +256,7 @@ h1 {
 }
 
 .setup-band h2,
+.live-mode-band h2,
 .showcase-band h2,
 .support-band h2,
 .manual-band h2 {
@@ -182,9 +264,14 @@ h1 {
   margin-bottom: 18px;
 }
 
+.setup-band .section-heading p:last-child {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -202,11 +289,32 @@ h1 {
 }
 
 .feature-grid p,
+.live-mode-band p,
 .showcase-band p,
 .support-band p,
 .manual-band p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.live-mode-band {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.72fr) minmax(0, 1.28fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.live-mode-band h2 {
+  max-width: 410px;
+  margin-bottom: 0;
+}
+
+.live-mode-copy {
+  max-width: 690px;
+}
+
+.live-mode-copy p:last-child {
+  margin-bottom: 0;
 }
 
 .showcase-band {
@@ -266,9 +374,17 @@ h1 {
   text-underline-offset: 4px;
 }
 
+.manual-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
 @media (max-width: 880px) {
   .hero,
-  .support-band {
+  .support-band,
+  .live-mode-band,
+  .recommendation-band {
     min-height: auto;
     grid-template-columns: 1fr;
     padding: 42px 0;
@@ -280,6 +396,10 @@ h1 {
 
   .showcase-grid {
     grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: 52px;
   }
 }
 
@@ -295,6 +415,19 @@ h1 {
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+
+  h1 {
+    font-size: 42px;
+  }
+
+  .download-meta {
+    display: grid;
+    gap: 6px;
+  }
+
+  .download-meta span + span::before {
+    display: none;
   }
 }
 

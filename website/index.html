@@ -17,87 +17,168 @@
         <div class="hero-copy">
           <div class="brand-row">
             <img src="/cursivis-icon.png" alt="" class="brand-icon" />
-            <span>Cursivis</span>
+            <div>
+              <span>Cursivis</span>
+              <small>Windows Companion | v1.5.0</small>
+            </div>
           </div>
-          <h1 id="title">Finish Your Cursivis Setup</h1>
+          <p class="eyebrow">One quick install after Logitech Marketplace</p>
+          <h1 id="title">Finish setup. Stay in your flow.</h1>
           <p>
-            Thank you for installing the Logitech plugin. Install the Companion
-            once, then Cursivis can connect your MX actions to AI workflows
-            automatically.
+            Cursivis brings intelligence to your cursor. Install Companion once,
+            add your Gemini API key, then select, speak, and act through your
+            Logitech MX controls without leaving your work.
           </p>
           <div class="actions">
             <a
               class="primary-button"
-              href="https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.4.1/CursivisCompanionSetup_1_4_1.exe"
+              href="/downloads/CursivisCompanionSetup_1_5_0.exe"
+              download
             >
-              Download Companion Setup
+              Download for Windows
             </a>
-            <a class="secondary-button" href="https://github.com/UnknownGod2011/MX--Cursivis">
-              View GitHub
+            <a
+              class="secondary-button"
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Get a Gemini API key
             </a>
           </div>
+          <div class="download-meta" aria-label="Download details">
+            <span>Windows 10/11</span>
+            <span>64-bit</span>
+            <span>68.3 MB</span>
+            <span>No Node or developer tools required</span>
+          </div>
           <p class="security-note">
-            Windows may ask for permission before running setup. That is expected.
-            The setup installs only the local Cursivis runtime and keeps your API
-            keys on your computer.
+            Windows may show its normal security prompt before running a new
+            installer. Companion installs for your Windows account, starts the
+            required local services, and stores saved API keys using Windows
+            encryption.
           </p>
         </div>
-        <div class="status-panel" aria-label="Setup steps">
+        <div class="status-panel" aria-label="Recommended setup steps">
+          <p class="panel-kicker">Recommended first run</p>
+          <h2>API LLM setup</h2>
           <div class="step active">
             <span>1</span>
             <div>
-              <strong>Install the Logitech plugin</strong>
-              <p>Use Logitech Marketplace / Logi Options+ to add Cursivis.</p>
+              <strong>Run Companion Setup</strong>
+              <p>Open the downloaded file and let setup finish.</p>
             </div>
           </div>
           <div class="step">
             <span>2</span>
             <div>
-              <strong>Download Companion Setup</strong>
-              <p>Open the downloaded file. It handles the runtime setup.</p>
+              <strong>Open Cursivis Settings</strong>
+              <p>Choose <b>API LLM (Recommended)</b>.</p>
             </div>
           </div>
           <div class="step">
             <span>3</span>
             <div>
-              <strong>Choose AI backend</strong>
-              <p>Add your API keys or choose a Local LLM from Settings.</p>
+              <strong>Add your Gemini API key</strong>
+              <p>Paste one or more keys, save, then press Test.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span>4</span>
+            <div>
+              <strong>Use your MX trigger</strong>
+              <p>Select content for Go and Snip, or start Live Mode and speak.</p>
             </div>
           </div>
         </div>
       </section>
 
+      <section class="recommendation-band" aria-labelledby="recommended">
+        <div>
+          <p class="eyebrow">Best experience for new users</p>
+          <h2 id="recommended">Start with your own Gemini API key</h2>
+        </div>
+        <p>
+          Cursivis works best when you add your own Gemini API key. This is the
+          recommended setup for fast text and image responses and for Cursivis
+          Live Mode. Local LLM mode remains available later from Settings for
+          users who prefer on-device processing.
+        </p>
+      </section>
+
       <section class="setup-band" aria-labelledby="what-setup-does">
-        <h2 id="what-setup-does">What Companion Setup Does</h2>
+        <div class="section-heading">
+          <p class="eyebrow">Automatic on your PC</p>
+          <h2 id="what-setup-does">What happens after you click download</h2>
+          <p>
+            Setup handles the runtime connection for you. You do not need Visual
+            Studio, VS Code, Node.js, PowerShell commands, or manual port setup.
+          </p>
+        </div>
         <div class="feature-grid">
           <article>
-            <h3>Connects the plugin</h3>
+            <h3>Installs Companion</h3>
             <p>
-              Writes the local runtime profile used by the Logitech plugin to
-              find Cursivis Companion on your PC.
+              Adds the Companion app and local runtime under your Windows user
+              account.
             </p>
           </article>
           <article>
-            <h3>Installs the runtime</h3>
+            <h3>Connects Logitech actions</h3>
             <p>
-              Adds Companion, backend, browser action support, and the gesture
-              hotkey host to your local app data folder.
+              Creates the local profile used by the Marketplace plugin, Actions
+              Ring, Creative Console, and Go shortcut.
             </p>
           </article>
           <article>
-            <h3>Starts with Windows</h3>
+            <h3>Adds Live Mode</h3>
             <p>
-              Registers the background pieces so Logitech actions work after
-              restart without opening developer tools.
+              Enables an optional permission-aware voice session inside the same
+              Cursivis Companion and unified runtime.
             </p>
           </article>
           <article>
-            <h3>Keeps setup simple</h3>
+            <h3>Starts quietly with Windows</h3>
             <p>
-              Downloads portable Node only if needed. Local LLM models download
-              later only when you choose that option.
+              Registers Companion and the hotkey host so your triggers are ready
+              after sign-in.
             </p>
           </article>
+          <article>
+            <h3>Preserves your choices</h3>
+            <p>
+              Updates keep your API keys, selected backend, shortcuts, and local
+              preferences.
+            </p>
+          </article>
+          <article>
+            <h3>Includes browser support</h3>
+            <p>
+              Advanced control of your current browser tab uses included
+              extension files. Chrome-family browsers still ask you to approve
+              the extension once for security.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="live-mode-band" aria-labelledby="live-mode">
+        <div>
+          <p class="eyebrow">New in 1.5</p>
+          <h2 id="live-mode">Say it. Cursivis gets it done.</h2>
+        </div>
+        <div class="live-mode-copy">
+          <p>
+            Add <strong>Cursivis Live Mode</strong> to Actions Ring and talk
+            naturally to Cursivis. Ask questions, work with selected text, open
+            apps, control windows, prepare drafts, or start a browser workflow.
+          </p>
+          <p>
+            Auto Execute keeps routine actions frictionless by default. You can
+            switch to Require Confirmation in Settings, and irreversible system
+            actions still require approval. Press Ctrl+Alt+X or the Live Mode
+            action again to stop the microphone session.
+          </p>
         </div>
       </section>
 
@@ -150,17 +231,20 @@
       </section>
 
       <section class="manual-band" aria-labelledby="manual">
-        <h2 id="manual">Manual Fallback</h2>
+        <h2 id="manual">Advanced fallback</h2>
         <p>
-          Most users should use Companion Setup. If your security software blocks
-          installers, download the runtime ZIP and run the included setup command.
+          Most users should use the Windows installer above. If security software
+          blocks the download or setup, use the support links below and include
+          the message shown by Windows.
         </p>
-        <a
-          class="text-link"
-          href="https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.4.1/CursivisRuntime_1_4_1.zip"
-        >
-          Download runtime ZIP
-        </a>
+        <div class="manual-links">
+          <a class="text-link" href="https://github.com/UnknownGod2011/MX--Cursivis">
+            Source and documentation
+          </a>
+          <a class="text-link" href="https://github.com/UnknownGod2011/MX--Cursivis/issues">
+            Report a setup issue
+          </a>
+        </div>
       </section>
     </main>
   </body>

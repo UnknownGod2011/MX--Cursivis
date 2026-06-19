@@ -12,13 +12,13 @@ name: Cursivis
 displayName: Cursivis
 
 # Short description of the plugin.
-description: Cursor-native workflow control for Logitech MX Creative Console, MX Master 4, and Actions Ring.
+description: Bring intelligence to your cursor with selection-aware MX actions and permission-aware Cursivis Live Mode.
 
 # Name of the plugin library file.
 pluginFileName: CursivisPlugin.dll
 
 # Plugin version.
-version: 1.4.1
+version: 1.5.0
 
 # Author of the plugin. The author can be a company or an individual developer.
 author: Tanush Shah
@@ -48,7 +48,7 @@ supportedDevices:
 
 # List of plugin capabilities.
 pluginCapabilities:
-    - HasHapticMapping
+    - HasHapticsMapping
 
     # Uncomment the following line if this plugin is an application plugin.
     #- HasApplication

@@ -39,6 +39,47 @@ function Copy-RuntimePayload {
     }
 }
 
+function Stop-InstalledRuntimeProcesses {
+    param([string]$InstallRoot)
+
+    if (-not (Test-Path -LiteralPath $InstallRoot)) {
+        return
+    }
+
+    $normalizedRoot = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd("\") + "\"
+    Get-Process | ForEach-Object {
+        try {
+            $path = $_.MainModule.FileName
+            if (-not [string]::IsNullOrWhiteSpace($path) -and
+                [System.IO.Path]::GetFullPath($path).StartsWith(
+                    $normalizedRoot,
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
+                Stop-Process -Id $_.Id -Force -ErrorAction Stop
+            }
+        }
+        catch {
+            # Ignore processes that exit or deny module inspection.
+        }
+    }
+}
+
+function Reset-RuntimePayloadDirectories {
+    param([string]$InstallRoot)
+
+    New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+    $normalizedRoot = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd("\") + "\"
+    foreach ($name in @("app", "backend", "desktop", "shared")) {
+        $target = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot $name))
+        if (-not $target.StartsWith($normalizedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to replace a runtime directory outside '$InstallRoot'."
+        }
+
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
+    }
+}
+
 function Ensure-PortableNode {
     param(
         [string]$Destination,
@@ -251,6 +292,8 @@ Write-Host "Cursivis Runtime Setup"
 Write-Host "Install location: $installRoot"
 
 Write-Step "Installing Cursivis runtime files"
+Stop-InstalledRuntimeProcesses -InstallRoot $installRoot
+Reset-RuntimePayloadDirectories -InstallRoot $installRoot
 Copy-RuntimePayload -Source $payloadRoot -Destination $installRoot
 
 $nodeExe = Ensure-PortableNode -Destination $installRoot -Version $NodeVersion

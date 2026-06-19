@@ -1,10 +1,13 @@
 using Cursivis.Companion.Controllers;
 using Cursivis.Companion.Infrastructure;
+using Cursivis.Companion.LiveMode;
 using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
+using NAudio.Wave;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
@@ -27,6 +30,7 @@ public partial class MainWindow : Window
     private readonly LogitechRuntimeStatusService _logitechRuntimeStatusService;
     private readonly RuntimeLaunchProfileService _runtimeLaunchProfileService;
     private readonly GeminiClient _runtimeGeminiClient;
+    private readonly LiveModeCoordinator? _liveModeCoordinator;
     private int _lastDialValue;
     private bool _suppressDialEvents;
     private bool _isModeInitialized;
@@ -41,19 +45,27 @@ public partial class MainWindow : Window
     private bool _playHapticSound;
     private string _goTriggerShortcut;
     private bool _isCapturingGoShortcut;
+    private bool _isCapturingLiveModeHotkey;
+    private bool _isCapturingLiveModeCancelHotkey;
+    private bool _isLiveModeUiInitialized;
     private bool _isUpdatingThemeSelection;
     private bool _isUpdatingApiKey;
     private bool _isUpdatingAiBackend;
     private CancellationTokenSource? _localModelDownloadCts;
     private bool _allowWindowClose;
 
-    public MainWindow(TriggerController triggerController, SettingsService settingsService, CompanionSettings initialSettings)
+    public MainWindow(
+        TriggerController triggerController,
+        SettingsService settingsService,
+        CompanionSettings initialSettings,
+        LiveModeCoordinator? liveModeCoordinator = null)
     {
         _triggerController = triggerController;
         _settingsService = settingsService;
         _logitechRuntimeStatusService = new LogitechRuntimeStatusService();
         _runtimeLaunchProfileService = new RuntimeLaunchProfileService();
         _runtimeGeminiClient = new GeminiClient();
+        _liveModeCoordinator = liveModeCoordinator;
         _showOrbDuringWorkflow = initialSettings.ShowOrbDuringWorkflow;
         _takeActionPromptPreference = initialSettings.TakeActionPromptPreference;
         _themeMode = initialSettings.ThemeMode;
@@ -87,6 +99,12 @@ public partial class MainWindow : Window
         DataObject.AddPastingHandler(ApiKeyTextBox, ApiKeyTextBox_OnPaste);
         _ = LoadRuntimeApiKeyIntoTextboxAsync();
         _ = LoadRuntimeAiBackendAsync();
+        SetLiveModePermissionCombo(_liveModeCoordinator?.PermissionMode ?? LiveModePermissionMode.AutoExecute);
+        InitializeLiveModeControls();
+        UpdateLiveModeStatus(new LiveModeStatusChangedEventArgs(
+            LiveModeVoicePhase.Idle,
+            "Cursivis Live Mode",
+            "Ready. Press the Live Mode action to start a voice session."));
         _isModeInitialized = true;
         StatusText.Text = $"Status: Ready in {initialSettings.Mode} mode. Press Trigger for text flow.";
         _logitechStatusTimer = new DispatcherTimer
@@ -101,6 +119,450 @@ public partial class MainWindow : Window
     }
 
     public event EventHandler<bool>? HapticSoundPreferenceChanged;
+
+    public void UpdateLiveModeStatus(LiveModeStatusChangedEventArgs status)
+    {
+        LiveModeStatusText.Text = $"{status.Title}: {status.Detail}".Trim();
+        ToggleLiveModeButton.Content = status.Phase is LiveModeVoicePhase.Listening
+            or LiveModeVoicePhase.Thinking
+            or LiveModeVoicePhase.Executing
+            or LiveModeVoicePhase.Speaking
+            ? "Stop Live Mode"
+            : "Start Live Mode";
+    }
+
+    private async void ToggleLiveModeButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_liveModeCoordinator is null)
+        {
+            LiveModeStatusText.Text = "Live Mode is unavailable in this runtime.";
+            return;
+        }
+
+        ToggleLiveModeButton.IsEnabled = false;
+        try
+        {
+            await _liveModeCoordinator.ToggleAsync();
+        }
+        finally
+        {
+            ToggleLiveModeButton.IsEnabled = true;
+        }
+    }
+
+    private void LiveModePermissionCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_liveModeCoordinator is null ||
+            LiveModePermissionCombo.SelectedItem is not ComboBoxItem item ||
+            item.Tag is not string value ||
+            !Enum.TryParse<LiveModePermissionMode>(value, true, out var permissionMode))
+        {
+            return;
+        }
+
+        _liveModeCoordinator.SetPermissionMode(permissionMode);
+    }
+
+    private void SetLiveModePermissionCombo(LiveModePermissionMode permissionMode)
+    {
+        foreach (var item in LiveModePermissionCombo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string value &&
+                string.Equals(value, permissionMode.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                LiveModePermissionCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        LiveModePermissionCombo.SelectedIndex = 0;
+    }
+
+    private void InitializeLiveModeControls()
+    {
+        var enabled = _liveModeCoordinator?.Enabled ?? false;
+        LiveModeEnabledCheckBox.IsChecked = enabled;
+        LiveModeHotkeyTextBox.Text = _liveModeCoordinator?.Hotkey ?? "Ctrl+Alt+Q";
+        LiveModeCancelHotkeyTextBox.Text = _liveModeCoordinator?.CancelHotkey ?? "Ctrl+Alt+X";
+
+        LiveModeMicrophoneCombo.Items.Clear();
+        LiveModeMicrophoneCombo.Items.Add(new ComboBoxItem
+        {
+            Content = "System default microphone",
+            Tag = -1,
+        });
+        try
+        {
+            for (var index = 0; index < WaveInEvent.DeviceCount; index++)
+            {
+                var capabilities = WaveInEvent.GetCapabilities(index);
+                LiveModeMicrophoneCombo.Items.Add(new ComboBoxItem
+                {
+                    Content = capabilities.ProductName,
+                    Tag = index,
+                });
+            }
+        }
+        catch
+        {
+            // The default microphone remains available if device enumeration fails.
+        }
+
+        SelectComboItemByTag(
+            LiveModeMicrophoneCombo,
+            (_liveModeCoordinator?.MicrophoneDevice ?? -1).ToString());
+        SelectComboItemByTag(
+            LiveModeVoiceCombo,
+            _liveModeCoordinator?.GeminiVoice ?? "Kore");
+        SelectComboItemByTag(
+            LiveModeToneCombo,
+            (_liveModeCoordinator?.AssistantTone ?? LiveModeAssistantTone.Balanced).ToString());
+        SelectComboItemByTag(
+            LiveModeBrowserCombo,
+            string.IsNullOrWhiteSpace(_liveModeCoordinator?.PreferredBrowser)
+                ? "default"
+                : _liveModeCoordinator.PreferredBrowser);
+        _isLiveModeUiInitialized = true;
+        UpdateLiveModeControlAvailability(enabled);
+    }
+
+    private static void SelectComboItemByTag(ComboBox comboBox, string tag)
+    {
+        foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase))
+            {
+                comboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (comboBox.Items.Count > 0)
+        {
+            comboBox.SelectedIndex = 0;
+        }
+    }
+
+    private async void LiveModeEnabledCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_isLiveModeUiInitialized || _liveModeCoordinator is null)
+        {
+            return;
+        }
+
+        var enabled = LiveModeEnabledCheckBox.IsChecked == true;
+        await _liveModeCoordinator.SetEnabledAsync(enabled);
+        UpdateLiveModeControlAvailability(enabled);
+        var registrationMessage = await RestartHotkeyHostForLiveModeAsync();
+        if (!string.IsNullOrWhiteSpace(registrationMessage))
+        {
+            LiveModeStatusText.Text = registrationMessage;
+        }
+    }
+
+    private void UpdateLiveModeControlAvailability(bool enabled)
+    {
+        LiveModeHotkeyTextBox.IsEnabled = enabled;
+        CaptureLiveModeHotkeyButton.IsEnabled = enabled;
+        ConnectLiveModeHotkeyButton.IsEnabled = enabled;
+        LiveModeCancelHotkeyTextBox.IsEnabled = enabled;
+        CaptureLiveModeCancelHotkeyButton.IsEnabled = enabled;
+        ConnectLiveModeCancelHotkeyButton.IsEnabled = enabled;
+        LiveModeMicrophoneCombo.IsEnabled = enabled;
+        LiveModeVoiceCombo.IsEnabled = enabled;
+        LiveModeToneCombo.IsEnabled = enabled;
+        LiveModeBrowserCombo.IsEnabled = enabled;
+        LiveModePermissionCombo.IsEnabled = enabled;
+        ToggleLiveModeButton.IsEnabled = enabled;
+    }
+
+    private void CaptureLiveModeHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _isCapturingLiveModeHotkey = true;
+        LiveModeHotkeyTextBox.Focus();
+        LiveModeHotkeyTextBox.SelectAll();
+        LiveModeStatusText.Text = "Press the shortcut you want to use for Cursivis Live Mode.";
+    }
+
+    private void LiveModeHotkeyTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_isCapturingLiveModeHotkey && !LiveModeHotkeyTextBox.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            _isCapturingLiveModeHotkey = false;
+            LiveModeHotkeyTextBox.Text = _liveModeCoordinator?.Hotkey ?? "Ctrl+Alt+Q";
+            LiveModeStatusText.Text = "Live Mode shortcut unchanged.";
+            return;
+        }
+
+        if (!TryShortcutFromKeyEvent(e, out var shortcut, out var validationMessage))
+        {
+            LiveModeStatusText.Text = validationMessage;
+            return;
+        }
+
+        _isCapturingLiveModeHotkey = false;
+        LiveModeHotkeyTextBox.Text = shortcut;
+        LiveModeStatusText.Text = $"Detected {shortcut}. Click Connect to activate it.";
+    }
+
+    private async void ConnectLiveModeHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_liveModeCoordinator is null)
+        {
+            return;
+        }
+
+        var shortcut = NormalizeShortcutDisplay(LiveModeHotkeyTextBox.Text);
+        var validationMessage = "Shortcut must include Ctrl or Alt plus a key.";
+        if (shortcut is null ||
+            !TryParseShortcut(shortcut, out _, out _, out validationMessage))
+        {
+            LiveModeStatusText.Text = validationMessage;
+            return;
+        }
+
+        var reserved = new[]
+        {
+            _goTriggerShortcut,
+            "Ctrl+Alt+A",
+            "Ctrl+Alt+V",
+            _liveModeCoordinator.CancelHotkey,
+        };
+        if (reserved.Any(value => string.Equals(
+                NormalizeShortcutDisplay(value),
+                shortcut,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            LiveModeStatusText.Text =
+                $"{shortcut} is already used by another Cursivis action. Choose a different shortcut.";
+            return;
+        }
+
+        _liveModeCoordinator.SetHotkey(shortcut);
+        LiveModeHotkeyTextBox.Text = shortcut;
+        var registrationMessage = await RestartHotkeyHostForLiveModeAsync();
+        LiveModeStatusText.Text = string.IsNullOrWhiteSpace(registrationMessage)
+            ? $"Live Mode shortcut connected: {shortcut}. {_liveModeCoordinator.CancelHotkey} stops the current session."
+            : registrationMessage;
+    }
+
+    private void CaptureLiveModeCancelHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _isCapturingLiveModeCancelHotkey = true;
+        LiveModeCancelHotkeyTextBox.Focus();
+        LiveModeCancelHotkeyTextBox.SelectAll();
+        LiveModeStatusText.Text = "Press the shortcut you want to use to stop Cursivis Live Mode.";
+    }
+
+    private void LiveModeCancelHotkeyTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_isCapturingLiveModeCancelHotkey && !LiveModeCancelHotkeyTextBox.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            _isCapturingLiveModeCancelHotkey = false;
+            LiveModeCancelHotkeyTextBox.Text = _liveModeCoordinator?.CancelHotkey ?? "Ctrl+Alt+X";
+            LiveModeStatusText.Text = "Live Mode stop shortcut unchanged.";
+            return;
+        }
+
+        if (!TryShortcutFromKeyEvent(e, out var shortcut, out var validationMessage))
+        {
+            LiveModeStatusText.Text = validationMessage;
+            return;
+        }
+
+        _isCapturingLiveModeCancelHotkey = false;
+        LiveModeCancelHotkeyTextBox.Text = shortcut;
+        LiveModeStatusText.Text = $"Detected {shortcut}. Click Connect to activate it.";
+    }
+
+    private async void ConnectLiveModeCancelHotkeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_liveModeCoordinator is null)
+        {
+            return;
+        }
+
+        var shortcut = NormalizeShortcutDisplay(LiveModeCancelHotkeyTextBox.Text);
+        var validationMessage = "Shortcut must include Ctrl or Alt plus a key.";
+        if (shortcut is null ||
+            !TryParseShortcut(shortcut, out _, out _, out validationMessage))
+        {
+            LiveModeStatusText.Text = validationMessage;
+            return;
+        }
+
+        var reserved = new[]
+        {
+            _goTriggerShortcut,
+            "Ctrl+Alt+A",
+            "Ctrl+Alt+V",
+            _liveModeCoordinator.Hotkey,
+        };
+        if (reserved.Any(value => string.Equals(
+                NormalizeShortcutDisplay(value),
+                shortcut,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            LiveModeStatusText.Text =
+                $"{shortcut} is already used by another Cursivis action. Choose a different shortcut.";
+            return;
+        }
+
+        _liveModeCoordinator.SetCancelHotkey(shortcut);
+        LiveModeCancelHotkeyTextBox.Text = shortcut;
+        var registrationMessage = await RestartHotkeyHostForLiveModeAsync();
+        LiveModeStatusText.Text = string.IsNullOrWhiteSpace(registrationMessage)
+            ? $"Live Mode stop shortcut connected: {shortcut}."
+            : registrationMessage;
+    }
+
+    private void LiveModeMicrophoneCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isLiveModeUiInitialized ||
+            _liveModeCoordinator is null ||
+            LiveModeMicrophoneCombo.SelectedItem is not ComboBoxItem item ||
+            !int.TryParse(item.Tag?.ToString(), out var deviceNumber))
+        {
+            return;
+        }
+
+        _liveModeCoordinator.SetMicrophoneDevice(deviceNumber);
+        LiveModeStatusText.Text =
+            "Microphone saved. It will be used the next time Live Mode starts.";
+    }
+
+    private void LiveModeVoiceCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isLiveModeUiInitialized ||
+            _liveModeCoordinator is null ||
+            LiveModeVoiceCombo.SelectedItem is not ComboBoxItem item ||
+            item.Tag is not string voice)
+        {
+            return;
+        }
+
+        _liveModeCoordinator.SetGeminiVoice(voice);
+        LiveModeStatusText.Text =
+            "Assistant voice saved. It will be used the next time Live Mode starts.";
+    }
+
+    private void LiveModeToneCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isLiveModeUiInitialized ||
+            _liveModeCoordinator is null ||
+            LiveModeToneCombo.SelectedItem is not ComboBoxItem item ||
+            item.Tag is not string value ||
+            !Enum.TryParse<LiveModeAssistantTone>(value, true, out var tone))
+        {
+            return;
+        }
+
+        _liveModeCoordinator.SetAssistantTone(tone);
+        LiveModeStatusText.Text = "Live Mode response style saved.";
+    }
+
+    private void LiveModeBrowserCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isLiveModeUiInitialized ||
+            _liveModeCoordinator is null ||
+            LiveModeBrowserCombo.SelectedItem is not ComboBoxItem item ||
+            item.Tag is not string browser)
+        {
+            return;
+        }
+
+        _liveModeCoordinator.SetPreferredBrowser(browser);
+        LiveModeStatusText.Text = browser == "default"
+            ? "Links will use the Windows default browser."
+            : $"Live Mode browser preference saved: {item.Content}.";
+    }
+
+    private async Task<string?> RestartHotkeyHostForLiveModeAsync()
+    {
+        try
+        {
+            var restartStartedUtc = DateTime.UtcNow;
+            var startupRegistrationService = new StartupRegistrationService();
+            await startupRegistrationService.EnsureRegisteredAsync();
+            var hotkeyHostService = new HotkeyHostService();
+            await hotkeyHostService.RestartAsync();
+            var registration = await WaitForHotkeyRegistrationStatusAsync(restartStartedUtc);
+            if (registration?.LiveModeRegistered == false)
+            {
+                return $"{registration.LiveModeHotkey} is already used by Windows or another app. Choose another Live Mode shortcut.";
+            }
+
+            if (registration?.CancelLiveModeRegistered == false)
+            {
+                return $"Live Mode is connected, but {registration.CancelLiveModeHotkey} could not be registered as the stop shortcut.";
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return $"Live Mode setting saved, but the shortcut host needs attention: {ex.Message}";
+        }
+    }
+
+    private static async Task<HotkeyRegistrationStatus?> WaitForHotkeyRegistrationStatusAsync(
+        DateTime restartStartedUtc)
+    {
+        var statusPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Cursivis",
+            "hotkey-registration.json");
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(statusPath))
+                {
+                    var json = await File.ReadAllTextAsync(statusPath);
+                    var status = JsonSerializer.Deserialize<HotkeyRegistrationStatus>(
+                        json,
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    if (status is not null &&
+                        status.UpdatedUtc >= restartStartedUtc.AddSeconds(-1))
+                    {
+                        return status;
+                    }
+                }
+            }
+            catch
+            {
+                // Retry while the host replaces its status file.
+            }
+
+            await Task.Delay(100);
+        }
+
+        return null;
+    }
+
+    private sealed record HotkeyRegistrationStatus(
+        DateTime UpdatedUtc,
+        bool GoRegistered,
+        bool TakeActionRegistered,
+        bool VoiceRegistered,
+        bool? LiveModeRegistered,
+        bool? CancelLiveModeRegistered,
+        string LiveModeHotkey,
+        string CancelLiveModeHotkey);
 
     protected override void OnClosed(EventArgs e)
     {

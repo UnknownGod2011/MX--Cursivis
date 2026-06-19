@@ -7,7 +7,7 @@ const app = createApp();
 const server = http.createServer(app);
 attachLiveGateway(server);
 
-server.listen(port, () => {
+server.listen(port, "127.0.0.1", () => {
   // eslint-disable-next-line no-console
   console.log(`[gemini-agent] Listening on http://127.0.0.1:${port}`);
 });

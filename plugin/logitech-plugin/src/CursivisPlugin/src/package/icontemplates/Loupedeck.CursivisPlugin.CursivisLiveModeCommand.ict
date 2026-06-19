@@ -1,0 +1,21 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjM0IiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iMTIiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIzNCIgc3Ryb2tlPSIjMTQxODFEIiBzdHJva2Utd2lkdGg9IjYiLz48cGF0aCBkPSJNMjQgNTJoMTBsNi0xNiAxMCAzMiA5LTI0IDYgOGgxMSIgc3Ryb2tlPSIjRjVGN0ZBIiBzdHJva2Utd2lkdGg9IjEyIi8+PHBhdGggZD0iTTI0IDUyaDEwbDYtMTYgMTAgMzIgOS0yNCA2IDhoMTEiIHN0cm9rZT0iIzE0MTgxRCIgc3Ryb2tlLXdpZHRoPSI2Ii8+PC9zdmc+",
+      "imageFileName": "live-mode-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
+      "isVisible": true,
+      "itemType": "Image",
+      "area": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
+      }
+    }
+  ]
+}

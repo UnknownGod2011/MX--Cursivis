@@ -4,14 +4,32 @@ using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 public sealed class SetupForm : Form
 {
-    private const string DisplayVersion = "1.4.1";
-    private const string PackageVersion = "1_4_1";
-    private const string RuntimeZipUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.4.1/CursivisRuntime_1_4_1.zip";
+    private const string DisplayVersion = "1.5.0";
+    private const string PackageVersion = "1_5_0";
+    private const string DefaultRuntimeZipUrl =
+        "https://7laoth4l2ecu5n2m.public.blob.vercel-storage.com/runtime/CursivisRuntime_1_5_0-E9A859F6ABC699AE-fvZFRZoPBY2rtHWWUUXv4ln30BNFAU.zip";
     private const string NodeVersion = "v22.22.0";
+    private static readonly string RuntimeZipUrl =
+        typeof(SetupForm).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute =>
+                string.Equals(attribute.Key, "CursivisRuntimeUrl", StringComparison.Ordinal))
+            ?.Value
+        ?? DefaultRuntimeZipUrl;
+    private static readonly string RuntimeZipSha256 =
+        typeof(SetupForm).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute =>
+                string.Equals(attribute.Key, "CursivisRuntimeSha256", StringComparison.Ordinal))
+            ?.Value
+            ?.Trim()
+        ?? string.Empty;
 
     private readonly Label statusLabel = new();
     private readonly Label detailLabel = new();
@@ -19,6 +37,12 @@ public sealed class SetupForm : Form
     private readonly TextBox logBox = new();
     private readonly Button closeButton = new();
     private readonly CancellationTokenSource cancellation = new();
+    private readonly object logFileLock = new();
+    private readonly string logFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Cursivis",
+        "Logs",
+        "setup.log");
 
     private bool started;
 
@@ -45,7 +69,7 @@ public sealed class SetupForm : Form
 
         var intro = new Label
         {
-            Text = "Thanks for installing the Cursivis Logitech plugin. This setup adds the Companion runtime, backend, and startup connection so your Logitech triggers can talk to Cursivis automatically.",
+            Text = "Thanks for installing the Cursivis Logitech plugin. This setup adds Companion, AI runtime services, Live Mode, and the startup connection used by your Logitech triggers.",
             AutoSize = false,
             Height = 62,
             Dock = DockStyle.Top,
@@ -113,6 +137,9 @@ public sealed class SetupForm : Form
         Controls.Add(content);
         Shown += async (_, _) => await StartInstallOnceAsync();
         FormClosing += (_, _) => cancellation.Cancel();
+
+        PrepareLogFile();
+        Log($"Setup {DisplayVersion} started.");
     }
 
     private async Task StartInstallOnceAsync()
@@ -126,7 +153,7 @@ public sealed class SetupForm : Form
         try
         {
             await InstallAsync(cancellation.Token);
-            SetStatus("Setup complete", "Cursivis Companion is installed and ready. Open Settings to add API keys or choose a Local LLM.");
+            SetStatus("Setup complete", "Cursivis is ready. Open Settings, add a Gemini API key, then use Talk, Go, Snip, Prompt Optimizer, or Live Mode.");
             Log("Done. You can close this setup window.");
         }
         catch (OperationCanceledException)
@@ -160,9 +187,9 @@ public sealed class SetupForm : Form
         Directory.CreateDirectory(tempRoot);
 
         SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package.");
-        await DownloadFileAsync(RuntimeZipUrl, zipPath, token);
+        await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
 
-        SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, backend, and trigger helpers.");
+        SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
         if (Directory.Exists(extractRoot))
         {
             Directory.Delete(extractRoot, recursive: true);
@@ -175,10 +202,12 @@ public sealed class SetupForm : Form
         {
             throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
         }
+        ValidateRuntimePayload(payloadRoot);
 
         SetStatus("Step 3 of 5: Installing runtime files", "Copying Cursivis into your local app data folder.");
         StopInstalledRuntimeProcesses(installRoot);
-        StopCursivisPortListeners();
+        StopCursivisPortListeners(installRoot);
+        ReplaceRuntimePayloadDirectories(installRoot);
         CopyDirectory(payloadRoot, installRoot);
 
         SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies. This is the longest first-time step.");
@@ -192,6 +221,9 @@ public sealed class SetupForm : Form
         RegisterStartup(installRoot);
         LaunchCompanion(installRoot);
         LaunchHotkeyHost(installRoot);
+        SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
+        await WaitForRuntimeServicesAsync(token);
+        Log("Companion backend and browser services are ready.");
     }
 
     private async Task<string> EnsurePortableNodeAsync(string installRoot, CancellationToken token)
@@ -211,7 +243,7 @@ public sealed class SetupForm : Form
         var extractRoot = Path.Combine(Path.GetTempPath(), $"cursivis-node-{NodeVersion}");
 
         SetStatus("Step 4 of 5: Downloading portable Node.js", "Cursivis uses a private portable Node runtime so users do not need developer tools.");
-        await DownloadFileAsync(archiveUrl, downloadPath, token);
+        await DownloadFileAsync(archiveUrl, downloadPath, expectedSha256: null, token);
 
         if (Directory.Exists(extractRoot))
         {
@@ -279,34 +311,104 @@ public sealed class SetupForm : Form
         }
     }
 
-    private async Task DownloadFileAsync(string url, string destination, CancellationToken token)
+    private async Task DownloadFileAsync(
+        string url,
+        string destination,
+        string? expectedSha256,
+        CancellationToken token)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        using var http = new HttpClient();
-        using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
-        response.EnsureSuccessStatusCode();
+        var partialPath = destination + ".partial";
+        Exception? lastError = null;
 
-        var total = response.Content.Headers.ContentLength;
-        await using var source = await response.Content.ReadAsStreamAsync(token);
-        await using var target = File.Create(destination);
-
-        var buffer = new byte[1024 * 128];
-        long readTotal = 0;
-        int read;
-        progressBar.Style = total.HasValue ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
-
-        while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), token)) > 0)
+        for (var attempt = 1; attempt <= 3; attempt++)
         {
-            await target.WriteAsync(buffer.AsMemory(0, read), token);
-            readTotal += read;
-            if (total.HasValue && total.Value > 0)
+            token.ThrowIfCancellationRequested();
+            try
             {
-                var percent = (int)Math.Min(100, readTotal * 100 / total.Value);
-                BeginInvoke(() => progressBar.Value = percent);
+                File.Delete(partialPath);
+                using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+                http.DefaultRequestHeaders.UserAgent.ParseAdd($"Cursivis-Companion-Setup/{DisplayVersion}");
+                using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+                response.EnsureSuccessStatusCode();
+
+                var total = response.Content.Headers.ContentLength;
+                long readTotal = 0;
+                {
+                    await using var source = await response.Content.ReadAsStreamAsync(token);
+                    await using var target = File.Create(partialPath);
+
+                    var buffer = new byte[1024 * 128];
+                    int read;
+                    progressBar.Style = total.HasValue ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
+                    BeginInvoke(() => progressBar.Value = 0);
+
+                    while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), token)) > 0)
+                    {
+                        await target.WriteAsync(buffer.AsMemory(0, read), token);
+                        readTotal += read;
+                        if (total.HasValue && total.Value > 0)
+                        {
+                            var percent = (int)Math.Min(100, readTotal * 100 / total.Value);
+                            BeginInvoke(() => progressBar.Value = percent);
+                        }
+                    }
+
+                    await target.FlushAsync(token);
+                }
+
+                if (total.HasValue && readTotal != total.Value)
+                {
+                    throw new InvalidDataException($"The download was incomplete ({readTotal} of {total.Value} bytes).");
+                }
+
+                if (!string.IsNullOrWhiteSpace(expectedSha256))
+                {
+                    VerifySha256(partialPath, expectedSha256);
+                }
+
+                File.Move(partialPath, destination, overwrite: true);
+                Log($"Downloaded {Path.GetFileName(destination)}.");
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                File.Delete(partialPath);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                File.Delete(partialPath);
+                Log($"Download attempt {attempt} failed: {ex.Message}");
+                if (attempt < 3)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2), token);
+                }
             }
         }
 
-        Log($"Downloaded {Path.GetFileName(destination)}.");
+        throw new InvalidOperationException(
+            "The download could not be completed after three attempts. Check your connection and run Setup again.",
+            lastError);
+    }
+
+    private static void VerifySha256(string path, string expectedSha256)
+    {
+        if (expectedSha256.Length != 64 ||
+            expectedSha256.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new InvalidOperationException(
+                "This setup build is missing a valid runtime integrity fingerprint.");
+        }
+
+        using var stream = File.OpenRead(path);
+        var actualSha256 = Convert.ToHexString(SHA256.HashData(stream));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                "The downloaded Cursivis runtime failed its integrity check. Delete the download and run Setup again.");
+        }
     }
 
     private static void CopyDirectory(string source, string destination)
@@ -314,14 +416,60 @@ public sealed class SetupForm : Form
         Directory.CreateDirectory(destination);
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
         {
-            Directory.CreateDirectory(directory.Replace(source, destination));
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
         }
 
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
-            var target = file.Replace(source, destination);
+            var target = Path.Combine(destination, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);
+        }
+    }
+
+    private static void ValidateRuntimePayload(string payloadRoot)
+    {
+        var requiredFiles = new[]
+        {
+            Path.Combine("app", "companion", "Cursivis.Companion.exe"),
+            Path.Combine("app", "hotkey-host", "Cursivis.HotkeyHost.exe"),
+            Path.Combine("app", "trigger-launcher", "Cursivis.TriggerLauncher.exe"),
+            Path.Combine("backend", "gemini-agent", "src", "server.js"),
+            Path.Combine("desktop", "browser-action-agent", "src", "server.js"),
+            Path.Combine("desktop", "browser-extension-chromium", "manifest.json"),
+            Path.Combine("desktop", "browser-native-host", "src", "host.js"),
+            Path.Combine("shared", "ipc-protocol", "schema", "agent-request.schema.json")
+        };
+
+        var missing = requiredFiles
+            .Where(relativePath => !File.Exists(Path.Combine(payloadRoot, relativePath)))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidDataException(
+                "The downloaded runtime package is incomplete. Missing: " + string.Join(", ", missing));
+        }
+    }
+
+    private static void ReplaceRuntimePayloadDirectories(string installRoot)
+    {
+        Directory.CreateDirectory(installRoot);
+        var normalizedRoot = Path.GetFullPath(installRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        foreach (var name in new[] { "app", "backend", "desktop", "shared" })
+        {
+            var target = Path.GetFullPath(Path.Combine(installRoot, name));
+            if (!target.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Refusing to replace a runtime directory outside '{installRoot}'.");
+            }
+
+            if (Directory.Exists(target))
+            {
+                Directory.Delete(target, recursive: true);
+            }
         }
     }
 
@@ -332,7 +480,9 @@ public sealed class SetupForm : Form
             return;
         }
 
-        var normalizedRoot = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedRoot = Path.GetFullPath(installRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
         var currentProcessId = Environment.ProcessId;
 
         foreach (var process in Process.GetProcesses())
@@ -375,10 +525,13 @@ public sealed class SetupForm : Form
         }
     }
 
-    private void StopCursivisPortListeners()
+    private void StopCursivisPortListeners(string installRoot)
     {
         var reservedPorts = new HashSet<string>(StringComparer.Ordinal) { "8080", "48820", "48830" };
         var pids = new HashSet<int>();
+        var normalizedRoot = Path.GetFullPath(installRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
 
         try
         {
@@ -444,14 +597,120 @@ public sealed class SetupForm : Form
             try
             {
                 using var process = Process.GetProcessById(pid);
+                var executablePath = TryGetProcessPath(process);
+                var commandLine = TryGetProcessCommandLine(pid);
+                var belongsToCursivis =
+                    (!string.IsNullOrWhiteSpace(executablePath) &&
+                     Path.GetFullPath(executablePath).StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(commandLine) &&
+                     commandLine.Contains(normalizedRoot, StringComparison.OrdinalIgnoreCase));
+
+                if (!belongsToCursivis)
+                {
+                    throw new InvalidOperationException(
+                        $"A different application is using a Cursivis local port ({process.ProcessName}, PID {pid}). " +
+                        "Close that application and run Setup again.");
+                }
+
                 Log("Stopping previous Cursivis port listener: " + process.ProcessName);
                 process.Kill(entireProcessTree: true);
                 process.WaitForExit(5000);
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
             }
             catch
             {
                 // The process may have already exited or may deny termination.
             }
+        }
+    }
+
+    private static string? TryGetProcessPath(Process process)
+    {
+        try
+        {
+            return process.MainModule?.FileName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? TryGetProcessCommandLine(int processId)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments =
+                    $"-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_Process -Filter 'ProcessId = {processId}').CommandLine\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null)
+            {
+                return null;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            return process.ExitCode == 0 ? output.Trim() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task WaitForRuntimeServicesAsync(CancellationToken token)
+    {
+        var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "http://127.0.0.1:8080/health",
+            "http://127.0.0.1:48820/health",
+            "http://127.0.0.1:48830/health"
+        };
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+
+        while (pending.Count > 0 && DateTime.UtcNow < deadline)
+        {
+            token.ThrowIfCancellationRequested();
+            foreach (var endpoint in pending.ToArray())
+            {
+                try
+                {
+                    using var response = await http.GetAsync(endpoint, token);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        pending.Remove(endpoint);
+                    }
+                }
+                catch when (!token.IsCancellationRequested)
+                {
+                    // The Companion may still be starting this local service.
+                }
+            }
+
+            if (pending.Count > 0)
+            {
+                await Task.Delay(750, token);
+            }
+        }
+
+        if (pending.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Cursivis installed, but one or more local services did not start. " +
+                "Restart Windows and run Setup again if the issue continues.");
         }
     }
 
@@ -608,5 +867,34 @@ public sealed class SetupForm : Form
         }
 
         logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+        try
+        {
+            lock (logFileLock)
+            {
+                File.AppendAllText(
+                    logFilePath,
+                    $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+            }
+        }
+        catch
+        {
+            // Setup logging must never interrupt installation or recovery.
+        }
+    }
+
+    private void PrepareLogFile()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(logFilePath)!);
+            if (File.Exists(logFilePath) && new FileInfo(logFilePath).Length > 1024 * 1024)
+            {
+                File.Delete(logFilePath);
+            }
+        }
+        catch
+        {
+            // The on-screen log remains available if the file cannot be created.
+        }
     }
 }

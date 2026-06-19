@@ -110,7 +110,7 @@ app.post("/execute-plan", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
+app.listen(port, "127.0.0.1", () => {
   // eslint-disable-next-line no-console
   console.log(`[browser-action-agent] Listening on http://127.0.0.1:${port}`);
 });

@@ -34,12 +34,20 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
     private const int TriggerHotkeyId = 0xCA11;
     private const int TakeActionHotkeyId = 0xCA12;
     private const int VoiceHotkeyId = 0xCA13;
+    private const int LiveModeHotkeyId = 0xCA14;
+    private const int CancelLiveModeHotkeyId = 0xCA15;
     private const int WmHotKey = 0x0312;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
     private const uint ModWin = 0x0008;
     private const string DefaultGoTriggerShortcut = "Ctrl+Alt+Space";
+    private const string DefaultLiveModeShortcut = "Ctrl+Alt+Q";
+    private const string DefaultCancelLiveModeShortcut = "Ctrl+Alt+X";
+    private static readonly string RegistrationStatusPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Cursivis",
+        "hotkey-registration.json");
     private bool _disposed;
 
     public HotkeyWindow()
@@ -52,13 +60,39 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
             triggerKey = Keys.Space;
         }
 
-        if (!RegisterHotKey(Handle, TriggerHotkeyId, triggerModifiers, (uint)triggerKey))
+        var goRegistered = RegisterHotKey(Handle, TriggerHotkeyId, triggerModifiers, (uint)triggerKey);
+        if (!goRegistered)
         {
-            RegisterHotKey(Handle, TriggerHotkeyId, ModControl | ModAlt, (uint)Keys.Space);
+            goRegistered = RegisterHotKey(Handle, TriggerHotkeyId, ModControl | ModAlt, (uint)Keys.Space);
         }
 
-        RegisterHotKey(Handle, TakeActionHotkeyId, ModControl | ModAlt, (uint)Keys.A);
-        RegisterHotKey(Handle, VoiceHotkeyId, ModControl | ModAlt, (uint)Keys.V);
+        var takeActionRegistered = RegisterHotKey(Handle, TakeActionHotkeyId, ModControl | ModAlt, (uint)Keys.A);
+        var voiceRegistered = RegisterHotKey(Handle, VoiceHotkeyId, ModControl | ModAlt, (uint)Keys.V);
+
+        var liveModeSettings = LoadLiveModeHotkeys();
+        bool? liveModeRegistered = null;
+        bool? cancelLiveModeRegistered = null;
+        if (liveModeSettings.Enabled)
+        {
+            liveModeRegistered = RegisterConfiguredHotkey(
+                LiveModeHotkeyId,
+                liveModeSettings.Hotkey,
+                DefaultLiveModeShortcut);
+            cancelLiveModeRegistered = RegisterConfiguredHotkey(
+                CancelLiveModeHotkeyId,
+                liveModeSettings.CancelHotkey,
+                DefaultCancelLiveModeShortcut);
+        }
+
+        WriteRegistrationStatus(new HotkeyRegistrationStatus(
+            DateTime.UtcNow,
+            goRegistered,
+            takeActionRegistered,
+            voiceRegistered,
+            liveModeRegistered,
+            cancelLiveModeRegistered,
+            liveModeSettings.Hotkey,
+            liveModeSettings.CancelHotkey));
     }
 
     protected override void WndProc(ref Message m)
@@ -70,6 +104,8 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
                 TriggerHotkeyId => "tap",
                 TakeActionHotkeyId => "action",
                 VoiceHotkeyId => "long_press",
+                LiveModeHotkeyId => "live_mode",
+                CancelLiveModeHotkeyId => "live_mode_stop",
                 _ => null
             };
 
@@ -97,6 +133,8 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
                 UnregisterHotKey(Handle, TriggerHotkeyId);
                 UnregisterHotKey(Handle, TakeActionHotkeyId);
                 UnregisterHotKey(Handle, VoiceHotkeyId);
+                UnregisterHotKey(Handle, LiveModeHotkeyId);
+                UnregisterHotKey(Handle, CancelLiveModeHotkeyId);
                 DestroyHandle();
             }
         }
@@ -145,6 +183,108 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
         }
 
         return DefaultGoTriggerShortcut;
+    }
+
+    private bool RegisterConfiguredHotkey(int id, string shortcut, string fallback)
+    {
+        if (!TryParseShortcut(shortcut, out var modifiers, out var key) &&
+            !TryParseShortcut(fallback, out modifiers, out key))
+        {
+            return false;
+        }
+
+        return RegisterHotKey(Handle, id, modifiers, (uint)key);
+    }
+
+    private static void WriteRegistrationStatus(HotkeyRegistrationStatus status)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(RegistrationStatusPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var temporaryPath = RegistrationStatusPath + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(status));
+            File.Move(temporaryPath, RegistrationStatusPath, overwrite: true);
+        }
+        catch
+        {
+            // Hotkeys remain usable even if the optional status file cannot be written.
+        }
+    }
+
+    private static LiveModeHotkeySettings LoadLiveModeHotkeys()
+    {
+        var settings = new LiveModeHotkeySettings();
+        try
+        {
+            var settingsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Cursivis",
+                "live-mode.json");
+
+            if (!File.Exists(settingsPath))
+            {
+                return settings;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            var root = document.RootElement;
+            settings.Enabled = ReadBoolean(root, "Enabled", "enabled", fallback: true);
+            settings.Hotkey = ReadString(root, "Hotkey", "hotkey", DefaultLiveModeShortcut);
+            settings.CancelHotkey = ReadString(
+                root,
+                "CancelHotkey",
+                "cancelHotkey",
+                DefaultCancelLiveModeShortcut);
+        }
+        catch
+        {
+            // Keep the stable defaults if settings are unavailable.
+        }
+
+        return settings;
+    }
+
+    private static bool ReadBoolean(JsonElement root, string pascalName, string camelName, bool fallback)
+    {
+        if (root.TryGetProperty(pascalName, out var pascalValue) &&
+            pascalValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return pascalValue.GetBoolean();
+        }
+
+        if (root.TryGetProperty(camelName, out var camelValue) &&
+            camelValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return camelValue.GetBoolean();
+        }
+
+        return fallback;
+    }
+
+    private static string ReadString(
+        JsonElement root,
+        string pascalName,
+        string camelName,
+        string fallback)
+    {
+        if (root.TryGetProperty(pascalName, out var pascalValue) &&
+            !string.IsNullOrWhiteSpace(pascalValue.GetString()))
+        {
+            return pascalValue.GetString()!;
+        }
+
+        if (root.TryGetProperty(camelName, out var camelValue) &&
+            !string.IsNullOrWhiteSpace(camelValue.GetString()))
+        {
+            return camelValue.GetString()!;
+        }
+
+        return fallback;
     }
 
     private static bool TryParseShortcut(string value, out uint modifiers, out Keys key)
@@ -214,7 +354,24 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
 
         return Enum.TryParse(normalized, true, out key) && key != Keys.None;
     }
+
+    private sealed class LiveModeHotkeySettings
+    {
+        public bool Enabled { get; set; } = true;
+        public string Hotkey { get; set; } = DefaultLiveModeShortcut;
+        public string CancelHotkey { get; set; } = DefaultCancelLiveModeShortcut;
+    }
 }
+
+internal sealed record HotkeyRegistrationStatus(
+    DateTime UpdatedUtc,
+    bool GoRegistered,
+    bool TakeActionRegistered,
+    bool VoiceRegistered,
+    bool? LiveModeRegistered,
+    bool? CancelLiveModeRegistered,
+    string LiveModeHotkey,
+    string CancelLiveModeHotkey);
 
 internal static class TriggerDispatchClient
 {

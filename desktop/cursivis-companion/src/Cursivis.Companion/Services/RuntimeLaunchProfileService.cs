@@ -14,9 +14,11 @@ public sealed class RuntimeLaunchProfileService
     private readonly string _profileDir;
     private readonly string _profilePath;
 
-    public RuntimeLaunchProfileService()
+    public RuntimeLaunchProfileService(string? profileDir = null)
     {
-        _profileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cursivis");
+        _profileDir = string.IsNullOrWhiteSpace(profileDir)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cursivis")
+            : Path.GetFullPath(profileDir);
         _profilePath = Path.Combine(_profileDir, ProfileFileName);
     }
 

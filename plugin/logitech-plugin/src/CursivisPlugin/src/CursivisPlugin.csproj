@@ -26,11 +26,23 @@
     <PluginShortName>Cursivis</PluginShortName>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
+      <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <Target Name="VerifyPluginApiIsNotCopied" AfterTargets="Build">
+    <Error
+      Condition="Exists('$(OutputPath)PluginApi.dll')"
+      Text="PluginApi.dll is supplied by Logi Plugin Service and must not be copied into plugin output." />
+  </Target>
 
   <Target Name="CopyPackage" AfterTargets="PostBuildEvent">
     <Message Text="📦 Copying package files..." Importance="High" />

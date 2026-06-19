@@ -43,6 +43,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -802,6 +803,205 @@
                 </Border>
 
                 <Border Grid.Row="8"
+                        Margin="0,14,0,0"
+                        CornerRadius="22"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
+                        BorderThickness="1"
+                        Padding="16">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="12"
+                                   Text="Cursivis Live Mode" />
+                        <TextBlock Margin="0,4,0,10"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="11.5"
+                                   TextWrapping="Wrap"
+                                   Text="Talk naturally to Cursivis to open apps, control windows and browser tabs, work with selected text, create drafts, and run permission-aware Windows actions. Live Mode uses the saved Gemini API key pool." />
+                        <CheckBox x:Name="LiveModeEnabledCheckBox"
+                                  Margin="0,0,0,10"
+                                  Foreground="{DynamicResource Brush.TextMain}"
+                                  Content="Enable Cursivis Live Mode"
+                                  Checked="LiveModeEnabledCheckBox_OnChanged"
+                                  Unchecked="LiveModeEnabledCheckBox_OnChanged" />
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Live Mode shortcut" />
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Height="38"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="LiveModeHotkeyTextBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12.5"
+                                         IsReadOnly="True"
+                                         Text="Ctrl+Alt+Q"
+                                         PreviewKeyDown="LiveModeHotkeyTextBox_OnPreviewKeyDown" />
+                            </Border>
+                            <Button x:Name="CaptureLiveModeHotkeyButton"
+                                    Grid.Column="1"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="10,0,0,0"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Capture"
+                                    Click="CaptureLiveModeHotkeyButton_OnClick" />
+                            <Button x:Name="ConnectLiveModeHotkeyButton"
+                                    Grid.Column="2"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="8,0,0,0"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="Connect"
+                                    Click="ConnectLiveModeHotkeyButton_OnClick" />
+                        </Grid>
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Stop Live Mode shortcut" />
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Height="38"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="LiveModeCancelHotkeyTextBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="12,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12.5"
+                                         IsReadOnly="True"
+                                         Text="Ctrl+Alt+X"
+                                         PreviewKeyDown="LiveModeCancelHotkeyTextBox_OnPreviewKeyDown" />
+                            </Border>
+                            <Button x:Name="CaptureLiveModeCancelHotkeyButton"
+                                    Grid.Column="1"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="10,0,0,0"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Capture"
+                                    Click="CaptureLiveModeCancelHotkeyButton_OnClick" />
+                            <Button x:Name="ConnectLiveModeCancelHotkeyButton"
+                                    Grid.Column="2"
+                                    Width="86"
+                                    Height="38"
+                                    Margin="8,0,0,0"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="Connect"
+                                    Click="ConnectLiveModeCancelHotkeyButton_OnClick" />
+                        </Grid>
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Microphone" />
+                        <ComboBox x:Name="LiveModeMicrophoneCombo"
+                                  Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource GlassComboBoxStyle}"
+                                  SelectionChanged="LiveModeMicrophoneCombo_OnSelectionChanged" />
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Assistant voice" />
+                        <ComboBox x:Name="LiveModeVoiceCombo"
+                                  Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource GlassComboBoxStyle}"
+                                  SelectionChanged="LiveModeVoiceCombo_OnSelectionChanged">
+                            <ComboBoxItem Content="Kore - balanced" Tag="Kore" />
+                            <ComboBoxItem Content="Puck - lively" Tag="Puck" />
+                            <ComboBoxItem Content="Aoede - warm" Tag="Aoede" />
+                            <ComboBoxItem Content="Charon - calm" Tag="Charon" />
+                            <ComboBoxItem Content="Orus - clear" Tag="Orus" />
+                        </ComboBox>
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Response style" />
+                        <ComboBox x:Name="LiveModeToneCombo"
+                                  Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource GlassComboBoxStyle}"
+                                  SelectionChanged="LiveModeToneCombo_OnSelectionChanged">
+                            <ComboBoxItem Content="Balanced" Tag="Balanced" />
+                            <ComboBoxItem Content="Concise" Tag="Concise" />
+                            <ComboBoxItem Content="Friendly" Tag="Friendly" />
+                            <ComboBoxItem Content="Professional" Tag="Professional" />
+                        </ComboBox>
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Preferred browser for Live Mode" />
+                        <ComboBox x:Name="LiveModeBrowserCombo"
+                                  Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource GlassComboBoxStyle}"
+                                  SelectionChanged="LiveModeBrowserCombo_OnSelectionChanged">
+                            <ComboBoxItem Content="Windows default browser" Tag="default" />
+                            <ComboBoxItem Content="Google Chrome" Tag="chrome" />
+                            <ComboBoxItem Content="Microsoft Edge" Tag="edge" />
+                            <ComboBoxItem Content="Brave" Tag="brave" />
+                            <ComboBoxItem Content="Mozilla Firefox" Tag="firefox" />
+                            <ComboBoxItem Content="Opera" Tag="opera" />
+                            <ComboBoxItem Content="Vivaldi" Tag="vivaldi" />
+                            <ComboBoxItem Content="Arc" Tag="arc" />
+                        </ComboBox>
+                        <TextBlock Margin="0,0,0,5"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   Text="Action confirmations" />
+                        <ComboBox x:Name="LiveModePermissionCombo"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource GlassComboBoxStyle}"
+                                  SelectionChanged="LiveModePermissionCombo_OnSelectionChanged">
+                            <ComboBoxItem Content="Auto Execute (Recommended)" Tag="AutoExecute" />
+                            <ComboBoxItem Content="Require Confirmation" Tag="AlwaysAsk" />
+                        </ComboBox>
+                        <Button x:Name="ToggleLiveModeButton"
+                                Height="38"
+                                Margin="0,10,0,0"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Content="Start Live Mode"
+                                Click="ToggleLiveModeButton_OnClick" />
+                        <TextBlock x:Name="LiveModeStatusText"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   TextWrapping="Wrap"
+                                   Text="Cursivis Live Mode: Ready." />
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10"
+                                   TextWrapping="Wrap"
+                                   Text="Auto Execute is the default. Switch to Require Confirmation for approval before routine actions. Irreversible system actions still require confirmation." />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="9"
                         Margin="0,14,0,0"
                         CornerRadius="22"
                         Background="{DynamicResource Brush.CardGradient}"

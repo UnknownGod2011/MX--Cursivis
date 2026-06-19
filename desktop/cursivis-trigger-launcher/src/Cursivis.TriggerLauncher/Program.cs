@@ -53,9 +53,12 @@ static string NormalizePressType(string? value)
         "snip" => "snip-it",
         "snipit" => "snip-it",
         "snip-it" => "snip-it",
+        "live" or "live-mode" or "live_mode" => "live_mode",
+        "stop-live" or "stop-live-mode" or "live-mode-stop" or "live_mode_stop" => "live_mode_stop",
         "settings" => "settings",
         "dial_press" => "dial_press",
-        "tap" or "action" or "long_press" or "snip-it" => value.Trim().ToLowerInvariant(),
+        "tap" or "action" or "long_press" or "snip-it" or "live_mode" or "live_mode_stop" =>
+            value.Trim().ToLowerInvariant(),
         _ => "tap"
     };
 }

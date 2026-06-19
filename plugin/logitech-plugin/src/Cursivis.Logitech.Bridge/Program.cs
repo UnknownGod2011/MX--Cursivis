@@ -25,7 +25,7 @@ Console.WriteLine("Connected trigger channel.");
 using var hapticCts = new CancellationTokenSource();
 var hapticTask = Task.Run(() => RunHapticLoopAsync(new Uri(hapticEndpoint), hapticCts.Token));
 
-Console.WriteLine("Keys: [T]=Tap  [O]=PromptOptimizer  [L]=LongPress  [S]=LongPressStart  [E]=LongPressEnd  [P]=DialPress  [A]=DialTick -1  [D]=DialTick +1  [Q]=Quit");
+Console.WriteLine("Keys: [T]=Tap  [O]=PromptOptimizer  [V]=LiveMode  [L]=LongPress  [S]=LongPressStart  [E]=LongPressEnd  [P]=DialPress  [A]=DialTick -1  [D]=DialTick +1  [Q]=Quit");
 
 while (triggerWs.State == WebSocketState.Open)
 {
@@ -39,6 +39,7 @@ while (triggerWs.State == WebSocketState.Open)
     {
         ConsoleKey.T => BuildPayload("tap"),
         ConsoleKey.O => BuildPayload("prompt_optimizer"),
+        ConsoleKey.V => BuildPayload("live_mode"),
         ConsoleKey.L => BuildPayload("long_press"),
         ConsoleKey.S => BuildPayload("long_press_start"),
         ConsoleKey.E => BuildPayload("long_press_end"),

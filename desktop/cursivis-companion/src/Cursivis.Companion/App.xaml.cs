@@ -1,4 +1,5 @@
 using Cursivis.Companion.Controllers;
+using Cursivis.Companion.LiveMode;
 using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
@@ -28,6 +29,8 @@ public partial class App : Application
     private SettingsService? _settingsService;
     private CompanionSettings? _companionSettings;
     private GlobalMouseWheelService? _globalMouseWheelService;
+    private LiveModeCoordinator? _liveModeCoordinator;
+    private LiveModeOverlayWindow? _liveModeOverlayWindow;
     private bool _showOrbDuringWorkflow = true;
     private TakeActionPromptPreference _takeActionPromptPreference = TakeActionPromptPreference.AlwaysAskToRun;
     private bool _playHapticSound;
@@ -85,7 +88,7 @@ public partial class App : Application
             await runtimeBootstrapper.EnsureRuntimeReadyAsync(CancellationToken.None);
 
             var clipboardService = new ClipboardService();
-            var intentMemoryService = new IntentMemoryService();
+            var intentMemoryService = new Services.IntentMemoryService();
             _cursorTracker = new CursorTracker();
             _windowFocusTracker = new WindowFocusTracker();
             var selectionDetector = new SelectionDetector(clipboardService);
@@ -98,9 +101,16 @@ public partial class App : Application
             var voiceCaptureService = new VoiceCaptureService();
             var voiceCommandPromptService = new VoiceCommandPromptService(_geminiClient, voiceCaptureService);
             _orbOverlayWindow = new OrbOverlayWindow();
+            _orbOverlayWindow.ListeningStopRequested += OrbOverlayWindowOnListeningStopRequested;
             _resultPanelWindow = new ResultPanelWindow();
             _resultPanelWindow.SettingsRequested += ResultPanelWindowOnSettingsRequested;
             _resultPanelWindow.ThemeToggleRequested += ResultPanelWindowOnThemeToggleRequested;
+            _liveModeCoordinator = new LiveModeCoordinator(
+                new RuntimeLaunchProfileService(),
+                _extensionAutomationClient,
+                () => Dispatcher.Invoke(ShowSettingsWindow));
+            _liveModeCoordinator.StatusChanged += LiveModeCoordinatorOnStatusChanged;
+            _liveModeOverlayWindow = new LiveModeOverlayWindow();
 
             _triggerController = new TriggerController(
                 _cursorTracker,
@@ -124,6 +134,7 @@ public partial class App : Application
 
             _windowFocusTracker.RegisterCompanionWindow(_orbOverlayWindow);
             _windowFocusTracker.RegisterCompanionWindow(_resultPanelWindow);
+            _windowFocusTracker.RegisterCompanionWindow(_liveModeOverlayWindow);
             _windowFocusTracker.ExternalWindowActivated += (_, _) =>
             {
                 Dispatcher.Invoke(() =>
@@ -276,12 +287,15 @@ public partial class App : Application
             "snip" => "snip-it",
             "snipit" => "snip-it",
             "snip-it" => "snip-it",
+            "live" or "live-mode" or "live_mode" => "live_mode",
+            "stop-live" or "stop-live-mode" or "live-mode-stop" or "live_mode_stop" => "live_mode_stop",
             "settings" => "settings",
             "dial_press" => "dial_press",
             "dial_tick" => "dial_tick",
             "long_press_start" => "long_press_start",
             "long_press_end" => "long_press_end",
-            "tap" or "action" or "long_press" => value.Trim().ToLowerInvariant(),
+            "tap" or "action" or "long_press" or "live_mode" or "live_mode_stop" =>
+                value.Trim().ToLowerInvariant(),
             _ => "tap"
         };
     }
@@ -301,6 +315,11 @@ public partial class App : Application
         {
             _resultPanelWindow.SettingsRequested -= ResultPanelWindowOnSettingsRequested;
             _resultPanelWindow.ThemeToggleRequested -= ResultPanelWindowOnThemeToggleRequested;
+        }
+
+        if (_orbOverlayWindow is not null)
+        {
+            _orbOverlayWindow.ListeningStopRequested -= OrbOverlayWindowOnListeningStopRequested;
         }
 
         if (_mainWindow is not null)
@@ -345,6 +364,13 @@ public partial class App : Application
         _geminiClient?.Dispose();
         _browserAutomationClient?.Dispose();
         _extensionAutomationClient?.Dispose();
+        _liveModeOverlayWindow?.Dispose();
+        _liveModeOverlayWindow = null;
+        if (_liveModeCoordinator is not null)
+        {
+            _liveModeCoordinator.StatusChanged -= LiveModeCoordinatorOnStatusChanged;
+            _liveModeCoordinator.Dispose();
+        }
         base.OnExit(e);
     }
 
@@ -357,6 +383,7 @@ public partial class App : Application
 
         try
         {
+            LiveModeLog.Info($"boundary=ipc.received pressType={e.PressType.Trim().ToLowerInvariant()} source={e.Source}");
             await Dispatcher.InvokeAsync(() =>
             {
                 var pressType = e.PressType.Trim().ToLowerInvariant();
@@ -373,6 +400,13 @@ public partial class App : Application
                         break;
                     case "prompt_optimizer":
                         _ = _triggerController.HandlePromptOptimizerAsync(CancellationToken.None);
+                        break;
+                    case "live_mode":
+                        _orbOverlayWindow?.Hide();
+                        _ = _liveModeCoordinator?.ToggleAsync();
+                        break;
+                    case "live_mode_stop":
+                        _ = _liveModeCoordinator?.StopAsync();
                         break;
                     case "settings":
                         ShowSettingsWindow();
@@ -429,7 +463,11 @@ public partial class App : Application
             return null;
         }
 
-        _mainWindow = new MainWindow(triggerController, settingsService, companionSettings);
+        _mainWindow = new MainWindow(
+            triggerController,
+            settingsService,
+            companionSettings,
+            _liveModeCoordinator);
         _mainWindow.HapticSoundPreferenceChanged += MainWindowOnHapticSoundPreferenceChanged;
         _windowFocusTracker?.RegisterCompanionWindow(_mainWindow);
         MainWindow = _mainWindow;
@@ -606,5 +644,23 @@ public partial class App : Application
     private void MainWindowOnHapticSoundPreferenceChanged(object? sender, bool playHapticSound)
     {
         _playHapticSound = playHapticSound;
+    }
+
+    private void LiveModeCoordinatorOnStatusChanged(object? sender, LiveModeStatusChangedEventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _mainWindow?.UpdateLiveModeStatus(e);
+            _liveModeOverlayWindow?.RefreshNow();
+            _orbOverlayWindow?.Hide();
+        });
+    }
+
+    private void OrbOverlayWindowOnListeningStopRequested(object? sender, EventArgs e)
+    {
+        if (_liveModeCoordinator?.IsActive == true)
+        {
+            _ = _liveModeCoordinator.ToggleAsync();
+        }
     }
 }
