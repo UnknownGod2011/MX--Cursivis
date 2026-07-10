@@ -1,0 +1,85 @@
+name: Publish Cursivis Companion runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Runtime package version using underscores
+        required: true
+        default: 1_5_1
+      tag:
+        description: Existing GitHub Release tag
+        required: true
+        default: v1.5.1
+
+permissions:
+  contents: write
+
+jobs:
+  publish-runtime:
+    runs-on: windows-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build runtime package
+        shell: pwsh
+        run: ./scripts/build-cursivis-runtime-package.ps1 -Version '${{ inputs.version }}'
+
+      - name: Audit and hash runtime package
+        id: runtime
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipPath = Resolve-Path "artifacts/cursivis-runtime/CursivisRuntime_${{ inputs.version }}.zip"
+          $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $forbidden = @(
+              $zip.Entries |
+                Where-Object {
+                  $name = $_.FullName -replace '\\', '/'
+                  $name -match '(^|/)PluginApi\.dll$|\.pdb$|(^|/)\.env($|\.)|\.lplug4$'
+                } |
+                ForEach-Object FullName
+            )
+            if ($forbidden.Count -gt 0) {
+              throw "Forbidden runtime entries: $($forbidden -join ', ')"
+            }
+          }
+          finally {
+            $zip.Dispose()
+          }
+
+          $sha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+          "sha256=$sha256" >> $env:GITHUB_OUTPUT
+          "path=$zipPath" >> $env:GITHUB_OUTPUT
+          "### Runtime SHA-256`n`n``$sha256``" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload versioned GitHub Release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload '${{ inputs.tag }}' '${{ steps.runtime.outputs.path }}' `
+            --repo '${{ github.repository }}' `
+            --clobber
+
+      - name: Verify published asset metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assetName = "CursivisRuntime_${{ inputs.version }}.zip"
+          $release = gh release view '${{ inputs.tag }}' `
+            --repo '${{ github.repository }}' `
+            --json assets | ConvertFrom-Json
+          $asset = $release.assets | Where-Object name -eq $assetName
+          if (-not $asset -or $asset.state -ne 'uploaded') {
+            throw "GitHub Release asset '$assetName' was not published successfully."
+          }
+          "Published $($asset.name) ($($asset.size) bytes)."
