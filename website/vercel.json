@@ -5,7 +5,7 @@
   "trailingSlash": false,
   "headers": [
     {
-      "source": "/downloads/CursivisCompanionSetup_1_5_0.exe",
+      "source": "/downloads/CursivisCompanionSetup_1_5_1.exe",
       "headers": [
         {
           "key": "Content-Type",
@@ -13,7 +13,7 @@
         },
         {
           "key": "Content-Disposition",
-          "value": "attachment; filename=\"CursivisCompanionSetup_1_5_0.exe\""
+          "value": "attachment; filename=\"CursivisCompanionSetup_1_5_1.exe\""
         },
         {
           "key": "Cache-Control",

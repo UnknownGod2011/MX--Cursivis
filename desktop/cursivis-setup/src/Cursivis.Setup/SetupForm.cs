@@ -3,6 +3,7 @@ namespace Cursivis.Setup;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -10,11 +11,12 @@ using System.Text.Json;
 
 public sealed class SetupForm : Form
 {
-    private const string DisplayVersion = "1.5.0";
-    private const string PackageVersion = "1_5_0";
+    private const string DisplayVersion = "1.5.1";
+    private const string PackageVersion = "1_5_1";
     private const string DefaultRuntimeZipUrl =
-        "https://7laoth4l2ecu5n2m.public.blob.vercel-storage.com/runtime/CursivisRuntime_1_5_0-E9A859F6ABC699AE-fvZFRZoPBY2rtHWWUUXv4ln30BNFAU.zip";
+        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.1/CursivisRuntime_1_5_1.zip";
     private const string NodeVersion = "v22.22.0";
+    private static readonly string[] RuntimePayloadDirectories = ["app", "backend", "desktop", "shared"];
     private static readonly string RuntimeZipUrl =
         typeof(SetupForm).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -179,51 +181,97 @@ public sealed class SetupForm : Form
         var tempRoot = Path.Combine(Path.GetTempPath(), "CursivisSetup", PackageVersion);
         var zipPath = Path.Combine(tempRoot, $"CursivisRuntime_{PackageVersion}.zip");
         var extractRoot = Path.Combine(tempRoot, "extracted");
-        var installRoot = Path.Combine(
+        var programsRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Programs",
-            "Cursivis");
+            "Programs");
+        var installRoot = Path.Combine(programsRoot, "Cursivis");
+        var stagingRoot = Path.Combine(programsRoot, $"Cursivis.staging.{PackageVersion}");
+        var backupRoot = Path.Combine(programsRoot, $"Cursivis.backup.{PackageVersion}");
+        var runtimeCommitted = false;
+        var previousRuntimeExisted = false;
 
+        RecoverInterruptedUpdate(installRoot, stagingRoot, backupRoot);
         Directory.CreateDirectory(tempRoot);
 
-        SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package.");
-        await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
-
-        SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
-        if (Directory.Exists(extractRoot))
+        try
         {
-            Directory.Delete(extractRoot, recursive: true);
-        }
-        ZipFile.ExtractToDirectory(zipPath, extractRoot);
+            SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package from GitHub Releases.");
+            await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
 
-        var packageRoot = Path.Combine(extractRoot, $"CursivisRuntime_{PackageVersion}");
-        var payloadRoot = Path.Combine(packageRoot, "runtime");
-        if (!Directory.Exists(payloadRoot))
+            SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
+            TryDeleteDirectory(extractRoot);
+            ZipFile.ExtractToDirectory(zipPath, extractRoot);
+
+            var packageRoot = Path.Combine(extractRoot, $"CursivisRuntime_{PackageVersion}");
+            var payloadRoot = Path.Combine(packageRoot, "runtime");
+            if (!Directory.Exists(payloadRoot))
+            {
+                throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
+            }
+            ValidateRuntimePayload(payloadRoot);
+
+            SetStatus("Step 3 of 5: Staging runtime files", "Preparing the update without changing your working installation.");
+            TryDeleteDirectory(stagingRoot);
+            TryDeleteDirectory(backupRoot);
+            CopyDirectory(payloadRoot, stagingRoot);
+            ValidateRuntimePayload(stagingRoot);
+
+            SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies before activating the update.");
+            var nodeExe = await EnsurePortableNodeAsync(installRoot, token);
+            await InvokeNpmAsync(nodeExe, Path.Combine(stagingRoot, "backend", "gemini-agent"), token);
+            await InvokeNpmAsync(nodeExe, Path.Combine(stagingRoot, "desktop", "browser-action-agent"), token);
+
+            SetStatus("Step 5 of 5: Activating update", "Stopping the old runtime briefly and switching to the verified files.");
+            StopInstalledRuntimeProcesses(installRoot);
+            StopCursivisPortListeners(installRoot);
+            PreserveMutableRuntimeData(installRoot, stagingRoot);
+            previousRuntimeExisted = HasValidRuntimePayload(installRoot);
+            CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
+            runtimeCommitted = true;
+
+            try
+            {
+                SetStatus("Step 5 of 5: Connecting Logitech triggers", "Preserving settings, refreshing startup entries, and launching Companion.");
+                var profilePath = WriteRuntimeProfile(installRoot);
+                Log("Runtime profile: " + profilePath);
+                RegisterStartup(installRoot);
+                LaunchCompanion(installRoot);
+                LaunchHotkeyHost(installRoot);
+                SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
+                await WaitForRuntimeServicesAsync(token);
+                Log("Companion backend and browser services are ready.");
+                TryDeleteDirectory(backupRoot);
+            }
+            catch (Exception activationError)
+            {
+                Log("Activation failed. Restoring the previous runtime.");
+                StopInstalledRuntimeProcesses(installRoot);
+                StopCursivisPortListeners(installRoot);
+                RollbackRuntime(installRoot, backupRoot);
+                runtimeCommitted = false;
+
+                if (previousRuntimeExisted && HasValidRuntimePayload(installRoot))
+                {
+                    LaunchCompanion(installRoot);
+                    LaunchHotkeyHost(installRoot);
+                    await WaitForRuntimeServicesAsync(CancellationToken.None);
+                    Log("Previous runtime restored successfully.");
+                }
+
+                throw new InvalidOperationException(
+                    "Cursivis could not activate the update, so the previous working runtime was restored.",
+                    activationError);
+            }
+        }
+        finally
         {
-            throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
+            TryDeleteDirectory(stagingRoot);
+            if (!runtimeCommitted)
+            {
+                TryDeleteDirectory(backupRoot);
+            }
+            TryDeleteDirectory(tempRoot);
         }
-        ValidateRuntimePayload(payloadRoot);
-
-        SetStatus("Step 3 of 5: Installing runtime files", "Copying Cursivis into your local app data folder.");
-        StopInstalledRuntimeProcesses(installRoot);
-        StopCursivisPortListeners(installRoot);
-        ReplaceRuntimePayloadDirectories(installRoot);
-        CopyDirectory(payloadRoot, installRoot);
-
-        SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies. This is the longest first-time step.");
-        var nodeExe = await EnsurePortableNodeAsync(installRoot, token);
-        await InvokeNpmAsync(nodeExe, Path.Combine(installRoot, "backend", "gemini-agent"), token);
-        await InvokeNpmAsync(nodeExe, Path.Combine(installRoot, "desktop", "browser-action-agent"), token);
-
-        SetStatus("Step 5 of 5: Connecting Logitech triggers", "Writing runtime profile, startup entries, and launching Companion.");
-        var profilePath = WriteRuntimeProfile(installRoot);
-        Log("Runtime profile: " + profilePath);
-        RegisterStartup(installRoot);
-        LaunchCompanion(installRoot);
-        LaunchHotkeyHost(installRoot);
-        SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
-        await WaitForRuntimeServicesAsync(token);
-        Log("Companion backend and browser services are ready.");
     }
 
     private async Task<string> EnsurePortableNodeAsync(string installRoot, CancellationToken token)
@@ -320,6 +368,8 @@ public sealed class SetupForm : Form
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var partialPath = destination + ".partial";
         Exception? lastError = null;
+        File.Delete(destination);
+        File.Delete(partialPath);
 
         for (var attempt = 1; attempt <= 3; attempt++)
         {
@@ -330,7 +380,13 @@ public sealed class SetupForm : Form
                 using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
                 http.DefaultRequestHeaders.UserAgent.ParseAdd($"Cursivis-Companion-Setup/{DisplayVersion}");
                 using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestException(
+                        $"Download host returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
+                        inner: null,
+                        response.StatusCode);
+                }
 
                 var total = response.Content.Headers.ContentLength;
                 long readTotal = 0;
@@ -376,6 +432,18 @@ public sealed class SetupForm : Form
                 File.Delete(partialPath);
                 throw;
             }
+            catch (HttpRequestException ex) when (
+                ex.StatusCode.HasValue && IsPermanentDownloadStatus(ex.StatusCode.Value))
+            {
+                File.Delete(partialPath);
+                File.Delete(destination);
+                Log($"Permanent download failure from {new Uri(url).Host}: HTTP {(int)ex.StatusCode.Value}.");
+                throw new InvalidOperationException(
+                    $"A required Cursivis download is unavailable (HTTP {(int)ex.StatusCode.Value}). " +
+                    "Download the latest installer from https://mxcursivis.vercel.app and run it again. " +
+                    "If the issue continues, contact Cursivis support.",
+                    ex);
+            }
             catch (Exception ex)
             {
                 lastError = ex;
@@ -391,6 +459,16 @@ public sealed class SetupForm : Form
         throw new InvalidOperationException(
             "The download could not be completed after three attempts. Check your connection and run Setup again.",
             lastError);
+    }
+
+    private static bool IsPermanentDownloadStatus(HttpStatusCode statusCode)
+    {
+        return statusCode is
+            HttpStatusCode.BadRequest or
+            HttpStatusCode.Unauthorized or
+            HttpStatusCode.Forbidden or
+            HttpStatusCode.NotFound or
+            HttpStatusCode.Gone;
     }
 
     private static void VerifySha256(string path, string expectedSha256)
@@ -451,25 +529,144 @@ public sealed class SetupForm : Form
         }
     }
 
-    private static void ReplaceRuntimePayloadDirectories(string installRoot)
+    private void RecoverInterruptedUpdate(string installRoot, string stagingRoot, string backupRoot)
+    {
+        TryDeleteDirectory(stagingRoot);
+        if (!Directory.Exists(backupRoot))
+        {
+            return;
+        }
+
+        if (HasValidRuntimePayload(installRoot))
+        {
+            Log("Removing stale update backup after a previously completed install.");
+            TryDeleteDirectory(backupRoot);
+            return;
+        }
+
+        Log("Recovering the previous runtime from an interrupted update.");
+        StopInstalledRuntimeProcesses(installRoot);
+        StopCursivisPortListeners(installRoot);
+        RollbackRuntime(installRoot, backupRoot);
+    }
+
+    private static void PreserveMutableRuntimeData(string installRoot, string stagingRoot)
+    {
+        var relativeDataPaths = new[]
+        {
+            Path.Combine("desktop", "browser-action-agent", "data")
+        };
+
+        foreach (var relativePath in relativeDataPaths)
+        {
+            var source = Path.Combine(installRoot, relativePath);
+            var destination = Path.Combine(stagingRoot, relativePath);
+            if (!Directory.Exists(source))
+            {
+                continue;
+            }
+
+            TryDeleteDirectory(destination);
+            CopyDirectory(source, destination);
+        }
+    }
+
+    private static void CommitStagedRuntime(string stagingRoot, string installRoot, string backupRoot)
     {
         Directory.CreateDirectory(installRoot);
-        var normalizedRoot = Path.GetFullPath(installRoot)
+        Directory.CreateDirectory(backupRoot);
+        var movedNewDirectories = new List<string>();
+        var movedOldDirectories = new List<string>();
+
+        try
+        {
+            foreach (var name in RuntimePayloadDirectories)
+            {
+                var staged = RequireChildPath(stagingRoot, name);
+                var installed = RequireChildPath(installRoot, name);
+                var backup = RequireChildPath(backupRoot, name);
+                if (!Directory.Exists(staged))
+                {
+                    throw new InvalidDataException($"The staged runtime is missing '{name}'.");
+                }
+
+                if (Directory.Exists(installed))
+                {
+                    Directory.Move(installed, backup);
+                    movedOldDirectories.Add(name);
+                }
+
+                Directory.Move(staged, installed);
+                movedNewDirectories.Add(name);
+            }
+        }
+        catch
+        {
+            foreach (var name in movedNewDirectories.AsEnumerable().Reverse())
+            {
+                TryDeleteDirectory(RequireChildPath(installRoot, name));
+            }
+
+            foreach (var name in movedOldDirectories.AsEnumerable().Reverse())
+            {
+                var backup = RequireChildPath(backupRoot, name);
+                var installed = RequireChildPath(installRoot, name);
+                if (Directory.Exists(backup))
+                {
+                    Directory.Move(backup, installed);
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private static void RollbackRuntime(string installRoot, string backupRoot)
+    {
+        foreach (var name in RuntimePayloadDirectories)
+        {
+            var installed = RequireChildPath(installRoot, name);
+            var backup = RequireChildPath(backupRoot, name);
+            TryDeleteDirectory(installed);
+            if (Directory.Exists(backup))
+            {
+                Directory.Move(backup, installed);
+            }
+        }
+    }
+
+    private static bool HasValidRuntimePayload(string root)
+    {
+        try
+        {
+            ValidateRuntimePayload(root);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string RequireChildPath(string parent, string child)
+    {
+        var normalizedParent = Path.GetFullPath(parent)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
-
-        foreach (var name in new[] { "app", "backend", "desktop", "shared" })
+        var target = Path.GetFullPath(Path.Combine(parent, child));
+        if (!target.StartsWith(normalizedParent, StringComparison.OrdinalIgnoreCase))
         {
-            var target = Path.GetFullPath(Path.Combine(installRoot, name));
-            if (!target.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Refusing to replace a runtime directory outside '{installRoot}'.");
-            }
+            throw new InvalidOperationException($"Refusing to modify a path outside '{parent}'.");
+        }
 
-            if (Directory.Exists(target))
-            {
-                Directory.Delete(target, recursive: true);
-            }
+        return target;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
         }
     }
 

@@ -643,6 +643,53 @@ test("returns 429 when Gemini intent routing is quota-limited during suggest-act
   assert.equal(response.body.retryAfterSec, 19);
 });
 
+test("returns a friendly 503 after transient Gemini routing failures are exhausted", async () => {
+  const unavailableRouter = async () => {
+    throw new Error("503 UNAVAILABLE: This model is currently experiencing high demand.");
+  };
+
+  const app = createApp({ textGenerator: fakeGenerator, intentRouter: unavailableRouter });
+  const response = await request(app)
+    .post("/suggest-actions")
+    .send(makePayload("This is a short paragraph for testing."));
+
+  assert.equal(response.statusCode, 503);
+  assert.match(response.body.error, /temporarily unavailable/i);
+  assert.match(response.body.error, /retried automatically/i);
+  assert.doesNotMatch(response.body.details, /high demand/i);
+});
+
+test("returns a setup-focused 401 without exposing provider details when all keys are invalid", async () => {
+  const invalidKeyRouter = async () => {
+    throw new Error("401 UNAUTHENTICATED: API_KEY_INVALID secret provider detail");
+  };
+
+  const app = createApp({ textGenerator: fakeGenerator, intentRouter: invalidKeyRouter });
+  const response = await request(app)
+    .post("/suggest-actions")
+    .send(makePayload("This is a short paragraph for testing."));
+
+  assert.equal(response.statusCode, 401);
+  assert.match(response.body.error, /authenticate/i);
+  assert.match(response.body.details, /Cursivis Settings/i);
+  assert.doesNotMatch(JSON.stringify(response.body), /secret provider detail/i);
+});
+
+test("returns a sanitized 502 for malformed provider requests", async () => {
+  const malformedRouter = async () => {
+    throw new Error("400 INVALID_ARGUMENT: internal request body dump");
+  };
+
+  const app = createApp({ textGenerator: fakeGenerator, intentRouter: malformedRouter });
+  const response = await request(app)
+    .post("/suggest-actions")
+    .send(makePayload("This is a short paragraph for testing."));
+
+  assert.equal(response.statusCode, 502);
+  assert.match(response.body.error, /rejected/i);
+  assert.doesNotMatch(JSON.stringify(response.body), /internal request body dump/i);
+});
+
 test("prompt optimizer uses the explicit action without intent routing", async () => {
   let routerCalls = 0;
   let seenPrompt = "";

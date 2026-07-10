@@ -1,9 +1,10 @@
 param(
-    [string]$Version = "1_5_0",
+    [string]$Version = "1_5_1",
     [string]$NodeVersion = "v22.22.0",
     [switch]$SkipDotnetPublish,
     [switch]$SkipZip,
-    [switch]$SkipPluginPackage
+    [switch]$SkipPluginPackage,
+    [switch]$IncludePluginPackage
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,7 +129,7 @@ Copy-CleanDirectory -Source $sharedDir -Destination (Join-Path $runtimeRoot "sha
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.cmd") -Destination $packageRoot -Force
 
-if (-not $SkipPluginPackage) {
+if ($IncludePluginPackage -and -not $SkipPluginPackage) {
     if (-not (Test-Path -LiteralPath $pluginPackage)) {
         throw "Matching Logitech plugin package was not found: $pluginPackage"
     }

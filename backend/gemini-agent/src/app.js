@@ -10,7 +10,10 @@ import {
   normalizeIntentDecision
 } from "./contentClassifier.js";
 import { createAiProviderFromEnv, normalizeProviderId } from "./aiProviderFactory.js";
-import { hasConfiguredApiKeys } from "./apiKeyPool.js";
+import {
+  classifyGeminiError,
+  hasConfiguredApiKeys
+} from "./apiKeyPool.js";
 import { createBrowserActionPlanner, createBrowserActionPlanRefiner } from "./browserActionPlanner.js";
 import { describeDominantColorsFromImage } from "./imageAnalysis.js";
 import { createSchemaValidators } from "./schemas.js";
@@ -54,8 +57,63 @@ function extractRetryAfterSeconds(message) {
   return 30;
 }
 
-function isQuotaOrRateLimitError(message) {
-  return /RESOURCE_EXHAUSTED|quota exceeded|rate limit|429/i.test(message);
+function sendClassifiedProviderError(res, serviceName, details, operation) {
+  const category = classifyGeminiError(details);
+  const timestampUtc = new Date().toISOString();
+
+  if (category === "auth") {
+    return res.status(401).json({
+      error: `${serviceName} could not authenticate any saved API key.`,
+      details: "Open Cursivis Settings and replace invalid, revoked, blocked, or unauthorized API keys.",
+      timestampUtc
+    });
+  }
+
+  if (category === "quota") {
+    return res.status(429).json({
+      error: `${serviceName} quota/rate limit exceeded after trying the available key pool.`,
+      details: `${operation} can continue after the provider cooldown.`,
+      retryAfterSec: extractRetryAfterSeconds(details),
+      timestampUtc
+    });
+  }
+
+  if (category === "transient") {
+    return res.status(503).json({
+      error: `${serviceName} is temporarily unavailable. Cursivis retried automatically; please try again in a moment.`,
+      details: `${operation} did not recover after retrying available models and API keys.`,
+      retryAfterSec: extractRetryAfterSeconds(details),
+      timestampUtc
+    });
+  }
+
+  if (category === "transport_security") {
+    return res.status(503).json({
+      error: `${serviceName} could not establish a secure network connection.`,
+      details: "Check the internet connection, VPN, proxy, or security software, then try again.",
+      retryAfterSec: 30,
+      timestampUtc
+    });
+  }
+
+  if (category === "model") {
+    return res.status(503).json({
+      error: `${serviceName} could not reach a supported Gemini model.`,
+      details: `${operation} exhausted the configured model fallback chain.`,
+      retryAfterSec: 30,
+      timestampUtc
+    });
+  }
+
+  if (category === "malformed") {
+    return res.status(502).json({
+      error: `${serviceName} rejected the generated provider request.`,
+      details: `${operation} could not be completed. No API key or stack trace was exposed.`,
+      timestampUtc
+    });
+  }
+
+  return null;
 }
 
 function clamp(value, min, max) {
@@ -894,13 +952,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           );
         } catch (error) {
           const details = getErrorMessage(error);
-          if (isQuotaOrRateLimitError(details)) {
-            return res.status(429).json({
-              error: `${aiServiceName()} quota/rate limit exceeded.`,
-              details,
-              retryAfterSec: extractRetryAfterSeconds(details),
-              timestampUtc: new Date().toISOString()
-            });
+          const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Intent routing");
+          if (classifiedError) {
+            return classifiedError;
           }
 
           return res.status(500).json({
@@ -999,13 +1053,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
         );
       } catch (error) {
         const details = getErrorMessage(error);
-        if (isQuotaOrRateLimitError(details)) {
-          return res.status(429).json({
-            error: `${aiServiceName()} quota/rate limit exceeded.`,
-            details,
-            retryAfterSec: extractRetryAfterSeconds(details),
-            timestampUtc: new Date().toISOString()
-          });
+        const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Image intent routing");
+        if (classifiedError) {
+          return classifiedError;
         }
 
         return res.status(500).json({
@@ -1151,13 +1201,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(response);
     } catch (error) {
       const details = getErrorMessage(error);
-      if (isQuotaOrRateLimitError(details)) {
-        return res.status(429).json({
-          error: `${aiServiceName()} quota/rate limit exceeded.`,
-          details,
-          retryAfterSec: extractRetryAfterSeconds(details),
-          timestampUtc: new Date().toISOString()
-        });
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Analysis");
+      if (classifiedError) {
+        return classifiedError;
       }
 
       return res.status(500).json({
@@ -1246,13 +1292,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(toSuggestionResponse(intentDecision, extendedAlternatives));
     } catch (error) {
       const details = getErrorMessage(error);
-      if (isQuotaOrRateLimitError(details)) {
-        return res.status(429).json({
-          error: `${aiServiceName()} quota/rate limit exceeded.`,
-          details,
-          retryAfterSec: extractRetryAfterSeconds(details),
-          timestampUtc: new Date().toISOString()
-        });
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Suggestion routing");
+      if (classifiedError) {
+        return classifiedError;
       }
 
       return res.status(500).json({
@@ -1340,13 +1382,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       });
     } catch (error) {
       const details = getErrorMessage(error);
-      if (isQuotaOrRateLimitError(details)) {
-        return res.status(429).json({
-          error: `${transcribeServiceName} quota/rate limit exceeded for transcription.`,
-          details,
-          retryAfterSec: extractRetryAfterSeconds(details),
-          timestampUtc: new Date().toISOString()
-        });
+      const classifiedError = sendClassifiedProviderError(res, transcribeServiceName, details, "Transcription");
+      if (classifiedError) {
+        return classifiedError;
       }
 
       return res.status(500).json({
@@ -1393,13 +1431,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(plan);
     } catch (error) {
       const details = getErrorMessage(error);
-      if (isQuotaOrRateLimitError(details)) {
-        return res.status(429).json({
-          error: `${aiServiceName()} quota/rate limit exceeded for browser planning.`,
-          details,
-          retryAfterSec: extractRetryAfterSeconds(details),
-          timestampUtc: new Date().toISOString()
-        });
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Browser action planning");
+      if (classifiedError) {
+        return classifiedError;
       }
 
       return res.status(500).json({
@@ -1460,13 +1494,9 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(plan);
     } catch (error) {
       const details = getErrorMessage(error);
-      if (isQuotaOrRateLimitError(details)) {
-        return res.status(429).json({
-          error: `${aiServiceName()} quota/rate limit exceeded for browser plan refinement.`,
-          details,
-          retryAfterSec: extractRetryAfterSeconds(details),
-          timestampUtc: new Date().toISOString()
-        });
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Browser action refinement");
+      if (classifiedError) {
+        return classifiedError;
       }
 
       return res.status(500).json({

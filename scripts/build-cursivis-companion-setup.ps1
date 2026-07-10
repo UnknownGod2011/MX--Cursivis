@@ -1,6 +1,7 @@
 param(
-    [string]$Version = "1_5_0",
-    [string]$RuntimeUrl = "https://7laoth4l2ecu5n2m.public.blob.vercel-storage.com/runtime/CursivisRuntime_1_5_0-E9A859F6ABC699AE-fvZFRZoPBY2rtHWWUUXv4ln30BNFAU.zip"
+    [string]$Version = "1_5_1",
+    [string]$RuntimeUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.1/CursivisRuntime_1_5_1.zip",
+    [switch]$AllowLocalRuntimeUrl
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,10 +19,23 @@ if (-not (Test-Path -LiteralPath $runtimeZip)) {
 
 $runtimeSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $runtimeZip).Hash
 $runtimeUri = $null
-if (-not [Uri]::TryCreate($RuntimeUrl, [UriKind]::Absolute, [ref]$runtimeUri) -or
-    $runtimeUri.Scheme -ne "https" -or
-    -not $runtimeUri.Host.EndsWith(".public.blob.vercel-storage.com", [StringComparison]::OrdinalIgnoreCase)) {
-    throw "RuntimeUrl must be an HTTPS URL hosted by Vercel Blob."
+if (-not [Uri]::TryCreate($RuntimeUrl, [UriKind]::Absolute, [ref]$runtimeUri)) {
+    throw "RuntimeUrl must be an absolute URL."
+}
+
+$normalizedVersion = $Version.Replace('_', '.')
+$expectedReleasePath = "/UnknownGod2011/MX--Cursivis/releases/download/v$normalizedVersion/CursivisRuntime_$Version.zip"
+$isPinnedGitHubRelease =
+    $runtimeUri.Scheme -eq "https" -and
+    $runtimeUri.Host.Equals("github.com", [StringComparison]::OrdinalIgnoreCase) -and
+    $runtimeUri.AbsolutePath.Equals($expectedReleasePath, [StringComparison]::Ordinal)
+$isAllowedLocalUrl =
+    $AllowLocalRuntimeUrl -and
+    $runtimeUri.IsLoopback -and
+    ($runtimeUri.Scheme -eq "http" -or $runtimeUri.Scheme -eq "https")
+
+if (-not $isPinnedGitHubRelease -and -not $isAllowedLocalUrl) {
+    throw "RuntimeUrl must be the version-pinned MX--Cursivis GitHub Releases asset. Loopback URLs require -AllowLocalRuntimeUrl."
 }
 
 if (Test-Path -LiteralPath $publishDir) {
