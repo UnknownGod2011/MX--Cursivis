@@ -1,0 +1,65 @@
+name: Publish Cursivis Companion installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Installer version using underscores
+        required: true
+        default: 1_5_1
+      tag:
+        description: Existing GitHub Release tag
+        required: true
+        default: v1.5.1
+
+permissions:
+  contents: write
+
+jobs:
+  publish-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+
+      - name: Audit and hash installer
+        id: installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="website/public/downloads/CursivisCompanionSetup_${{ inputs.version }}.exe"
+          test -f "$installer"
+          if grep --binary-files=text -qi 'PluginApi\.dll' "$installer"; then
+            echo "PluginApi.dll must not be embedded in the setup artifact." >&2
+            exit 1
+          fi
+          sha256="$(sha256sum "$installer" | cut -d ' ' -f 1)"
+          size="$(stat -c '%s' "$installer")"
+          echo "path=$installer" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          printf '### Installer SHA-256\n\n`%s`\n' "$sha256" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload versioned GitHub Release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload '${{ inputs.tag }}' '${{ steps.installer.outputs.path }}' \
+            --repo '${{ github.repository }}' \
+            --clobber
+
+      - name: Verify published asset metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset_name="CursivisCompanionSetup_${{ inputs.version }}.exe"
+          asset="$(gh release view '${{ inputs.tag }}' \
+            --repo '${{ github.repository }}' \
+            --json assets \
+            --jq ".assets[] | select(.name == \"$asset_name\")")"
+          test -n "$asset"
+          test "$(jq -r '.state' <<< "$asset")" = "uploaded"
+          test "$(jq -r '.size' <<< "$asset")" = '${{ steps.installer.outputs.size }}'
+          echo "Published $asset_name (${{ steps.installer.outputs.size }} bytes)."
