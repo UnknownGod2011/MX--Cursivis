@@ -21,6 +21,8 @@ public sealed class TriggerIpcServer : IDisposable
 
     public event EventHandler<TriggerEventPayload>? TriggerReceived;
 
+    public bool IsListening => _listener.IsListening;
+
     public void Start()
     {
         _listener.Start();

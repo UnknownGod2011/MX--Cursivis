@@ -2,7 +2,7 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisLongPressCommand : PluginDynamicCommand
+    public class CursivisLongPressCommand : CompanionAwareCommand
     {
         public CursivisLongPressCommand()
             : base(displayName: "Cursivis Talk", description: "Start voice command capture in companion", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)

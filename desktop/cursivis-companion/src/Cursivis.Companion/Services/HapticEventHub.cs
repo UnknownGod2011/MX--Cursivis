@@ -20,6 +20,8 @@ public sealed class HapticEventHub : IDisposable
         _listener.Prefixes.Add(prefix);
     }
 
+    public bool IsListening => _listener.IsListening;
+
     public void Start()
     {
         _listener.Start();

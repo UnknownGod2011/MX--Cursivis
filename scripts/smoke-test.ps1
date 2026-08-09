@@ -1,6 +1,6 @@
 param(
     [string]$ApiKey,
-    [string]$BackendUrl = "http://127.0.0.1:8080",
+    [string]$BackendUrl = "http://127.0.0.1:51880",
     [string]$Text = "who is the richest person in the world"
 )
 

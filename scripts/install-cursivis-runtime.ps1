@@ -1,6 +1,5 @@
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Cursivis"),
-    [string]$NodeVersion = "v22.22.0",
     [switch]$InstallLogitechPlugin,
     [switch]$NoStartupShortcut,
     [switch]$NoLaunch
@@ -68,7 +67,7 @@ function Reset-RuntimePayloadDirectories {
 
     New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
     $normalizedRoot = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd("\") + "\"
-    foreach ($name in @("app", "backend", "desktop", "shared")) {
+    foreach ($name in @("app", "backend", "desktop", "node", "shared")) {
         $target = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot $name))
         if (-not $target.StartsWith($normalizedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "Refusing to replace a runtime directory outside '$InstallRoot'."
@@ -80,84 +79,19 @@ function Reset-RuntimePayloadDirectories {
     }
 }
 
-function Ensure-PortableNode {
-    param(
-        [string]$Destination,
-        [string]$Version
+function Assert-SelfContainedRuntime {
+    param([string]$Root)
+
+    $required = @(
+        "app\companion\Cursivis.Companion.exe",
+        "app\hotkey-host\Cursivis.HotkeyHost.exe",
+        "node\node.exe",
+        "backend\gemini-agent\node_modules",
+        "desktop\browser-action-agent\node_modules"
     )
-
-    $nodeDir = Join-Path $Destination "node"
-    $nodeExe = Join-Path $nodeDir "node.exe"
-    if (Test-Path -LiteralPath $nodeExe) {
-        return $nodeExe
-    }
-
-    New-Item -ItemType Directory -Force -Path $nodeDir | Out-Null
-    $archiveName = "node-$Version-win-x64.zip"
-    $archiveUrl = "https://nodejs.org/dist/$Version/$archiveName"
-    $downloadPath = Join-Path $env:TEMP $archiveName
-    $extractRoot = Join-Path $env:TEMP "cursivis-node-$Version"
-
-    Write-Step "Downloading portable Node.js $Version"
-    Invoke-WebRequest -Uri $archiveUrl -OutFile $downloadPath
-
-    if (Test-Path -LiteralPath $extractRoot) {
-        Remove-Item -LiteralPath $extractRoot -Recurse -Force
-    }
-
-    Expand-Archive -LiteralPath $downloadPath -DestinationPath $extractRoot -Force
-    $expandedDir = Get-ChildItem -LiteralPath $extractRoot -Directory | Select-Object -First 1
-    if ($null -eq $expandedDir) {
-        throw "Node.js archive did not contain the expected folder."
-    }
-
-    Get-ChildItem -LiteralPath $expandedDir.FullName -Force | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $nodeDir -Recurse -Force
-    }
-    return $nodeExe
-}
-
-function Invoke-NpmCi {
-    param(
-        [string]$NodeExe,
-        [string]$ProjectDir,
-        [switch]$ProductionOnly
-    )
-
-    if (-not (Test-Path -LiteralPath (Join-Path $ProjectDir "package.json"))) {
-        return
-    }
-
-    $npmCli = Join-Path (Split-Path -Parent $NodeExe) "node_modules\npm\bin\npm-cli.js"
-    if (-not (Test-Path -LiteralPath $npmCli)) {
-        throw "npm was not found in the portable Node.js folder."
-    }
-
-    Push-Location $ProjectDir
-    try {
-        if (Test-Path -LiteralPath (Join-Path $ProjectDir "package-lock.json")) {
-            if ($ProductionOnly) {
-                & $NodeExe $npmCli ci --omit=dev
-            }
-            else {
-                & $NodeExe $npmCli ci
-            }
-        }
-        else {
-            if ($ProductionOnly) {
-                & $NodeExe $npmCli install --omit=dev
-            }
-            else {
-                & $NodeExe $npmCli install
-            }
-        }
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "npm dependency setup failed in '$ProjectDir'."
-        }
-    }
-    finally {
-        Pop-Location
+    $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Root $_)) })
+    if ($missing.Count -gt 0) {
+        throw "This runtime package is incomplete. Missing: $($missing -join ', ')"
     }
 }
 
@@ -213,7 +147,7 @@ function Write-RuntimeProfile {
         companionProject = ""
         companionExecutable = $companionExe
         hotkeyHostExecutable = $hotkeyExe
-        backendUrl = "http://127.0.0.1:8080"
+        backendUrl = "http://127.0.0.1:51880"
         browserAgentUrl = "http://127.0.0.1:48820"
         extensionBridgeUrl = "http://127.0.0.1:48830"
         aiProvider = Get-ExistingProfileValue -Name "aiProvider" -DefaultValue "gemini"
@@ -296,13 +230,8 @@ Stop-InstalledRuntimeProcesses -InstallRoot $installRoot
 Reset-RuntimePayloadDirectories -InstallRoot $installRoot
 Copy-RuntimePayload -Source $payloadRoot -Destination $installRoot
 
-$nodeExe = Ensure-PortableNode -Destination $installRoot -Version $NodeVersion
-
-Write-Step "Preparing backend dependencies"
-Invoke-NpmCi -NodeExe $nodeExe -ProjectDir (Join-Path $installRoot "backend\gemini-agent") -ProductionOnly
-
-Write-Step "Preparing browser action dependencies"
-Invoke-NpmCi -NodeExe $nodeExe -ProjectDir (Join-Path $installRoot "desktop\browser-action-agent") -ProductionOnly
+Write-Step "Verifying bundled runtime"
+Assert-SelfContainedRuntime -Root $installRoot
 
 Write-Step "Writing Cursivis runtime profile"
 $profilePath = Write-RuntimeProfile -Root $installRoot

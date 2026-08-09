@@ -6,11 +6,11 @@ on:
       version:
         description: Installer version using underscores
         required: true
-        default: 1_5_1
+        default: 1_5_2
       tag:
         description: Existing GitHub Release tag
         required: true
-        default: v1.5.1
+        default: v1.5.2
 
 permissions:
   contents: write

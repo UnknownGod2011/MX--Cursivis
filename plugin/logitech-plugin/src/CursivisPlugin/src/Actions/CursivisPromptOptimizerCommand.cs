@@ -2,7 +2,7 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisPromptOptimizerCommand : PluginDynamicCommand
+    public class CursivisPromptOptimizerCommand : CompanionAwareCommand
     {
         public CursivisPromptOptimizerCommand()
             : base(displayName: "Cursivis Prompt Optimizer", description: "Optimize selected rough prompts or notes with Cursivis", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)

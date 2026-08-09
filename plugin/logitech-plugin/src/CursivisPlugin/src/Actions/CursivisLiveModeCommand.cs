@@ -2,7 +2,7 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisLiveModeCommand : PluginDynamicCommand
+    public class CursivisLiveModeCommand : CompanionAwareCommand
     {
         public CursivisLiveModeCommand()
             : base(

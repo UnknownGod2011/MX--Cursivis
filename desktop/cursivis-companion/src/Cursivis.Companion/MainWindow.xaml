@@ -2,10 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Cursivis Companion"
-        Height="700"
+        Icon="Assets/cursivis-icon.png"
+        Height="620"
         Width="456"
         MinWidth="428"
-        MinHeight="620"
+        MinHeight="520"
         ResizeMode="CanResizeWithGrip"
         Topmost="True"
         WindowStartupLocation="Manual"
@@ -26,9 +27,14 @@
                                   Color="#66000000"
                                   Opacity="0.34" />
             </Border.Effect>
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
+            <TabControl Style="{StaticResource SettingsTabControlStyle}">
+                <TabItem Header="Settings"
+                         Style="{StaticResource SettingsTabItemStyle}">
+            <ScrollViewer x:Name="SettingsScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Focusable="False"
+                          PreviewMouseWheel="SettingsScrollViewer_OnPreviewMouseWheel"
                           Padding="0">
                 <ScrollViewer.Resources>
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
@@ -289,6 +295,24 @@
                                        FontSize="11"
                                        TextWrapping="Wrap"
                                        Text="This affects Take Action from a normal result only. Direct Action from the ring still runs immediately." />
+                            <TextBlock Margin="0,16,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Support and recovery" />
+                            <Button x:Name="DiagnosticsRepairButton"
+                                    Width="154"
+                                    Height="36"
+                                    Margin="0,9,0,0"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource MutedButtonStyle}"
+                                    Content="Diagnostics &amp; Repair"
+                                    Click="DiagnosticsRepairButton_OnClick" />
+                            <TextBlock x:Name="DiagnosticsStatusText"
+                                       Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="10.5"
+                                       TextWrapping="Wrap"
+                                       Text="Checks local services, startup, runtime files, and Logitech connection without restarting healthy components." />
                         </StackPanel>
 
                         <Button Grid.Column="1"
@@ -1029,6 +1053,92 @@
                 </Border>
             </Grid>
             </ScrollViewer>
+                </TabItem>
+                <TabItem Header="How to Use"
+                         Style="{StaticResource SettingsTabItemStyle}">
+                    <ScrollViewer x:Name="HowToUseScrollViewer"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Focusable="False"
+                                  PreviewMouseWheel="SettingsScrollViewer_OnPreviewMouseWheel">
+                        <ScrollViewer.Resources>
+                            <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                        </ScrollViewer.Resources>
+                        <StackPanel>
+                            <Border CornerRadius="22"
+                                    Background="{DynamicResource Brush.SectionBackground}"
+                                    BorderBrush="{DynamicResource Brush.SectionBorder}"
+                                    BorderThickness="1"
+                                    Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                               FontSize="21"
+                                               Text="Start where you are" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Style="{StaticResource SubtleTextStyle}"
+                                               FontSize="12.5"
+                                               TextWrapping="Wrap"
+                                               Text="Cursivis turns what is already on your screen into useful AI help. Select, trigger, review, then keep working without opening a separate chat." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,14,0,0"
+                                    CornerRadius="20"
+                                    Background="{DynamicResource Brush.SectionBackground}"
+                                    BorderBrush="{DynamicResource Brush.SectionBorder}"
+                                    BorderThickness="1"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource HeadlineTextStyle}" FontSize="13" Text="1. Connect your AI" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
+                                               Text="Choose API LLM (Recommended), paste your Gemini API key, then press Save API Keys and Test. Local LLM stays private on your PC, but needs Ollama and a downloaded model." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,10,0,0"
+                                    CornerRadius="20"
+                                    Background="{DynamicResource Brush.SectionBackground}"
+                                    BorderBrush="{DynamicResource Brush.SectionBorder}"
+                                    BorderThickness="1"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource HeadlineTextStyle}" FontSize="13" Text="2. Choose a trigger" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
+                                               Text="In Logi Options+, assign Cursivis Go to an Actions Ring bubble, Creative Console button, or your MX gesture shortcut. Use Capture in Settings to record a shortcut, press Connect, then assign the same shortcut in Logi Options+." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,10,0,0"
+                                    CornerRadius="20"
+                                    Background="{DynamicResource Brush.SectionBackground}"
+                                    BorderBrush="{DynamicResource Brush.SectionBorder}"
+                                    BorderThickness="1"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource HeadlineTextStyle}" FontSize="13" Text="3. Pick the right Cursivis action" />
+                                    <TextBlock Margin="0,7,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
+                                               Text="Cursivis Go understands selected text or an image. Cursivis Talk captures a voice instruction. Cursivis Snip lets you capture part of the screen. Prompt Optimizer improves a rough draft. Take Action follows through on supported browser workflows." />
+                                    <TextBlock Margin="0,7,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
+                                               Text="Cursivis Live Mode is a continuous voice session for questions and permission-aware Windows actions. Press Ctrl+Alt+Q or its Logitech action to start, and Ctrl+Alt+X to stop." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,10,0,0"
+                                    CornerRadius="20"
+                                    Background="{DynamicResource Brush.SectionBackground}"
+                                    BorderBrush="{DynamicResource Brush.SectionBorder}"
+                                    BorderThickness="1"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource HeadlineTextStyle}" FontSize="13" Text="Need a hand?" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
+                                               Text="Use Diagnostics &amp; Repair if a trigger does not respond. It checks the Companion, Hotkey Host, backend, startup registration, and Logitech connection without restarting healthy components." />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
         </Border>
     </Border>
 </Window>

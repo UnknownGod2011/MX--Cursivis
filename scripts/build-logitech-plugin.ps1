@@ -1,7 +1,7 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [string]$Version = "1_5_0",
+    [string]$Version = "1_5_2",
     [switch]$SkipBuild,
     [switch]$InstallPackage
 )

@@ -21,7 +21,7 @@ Deploying the backend does not change the normal local demo unless you explicitl
 
 Default local behavior:
 
-- local backend stays on `http://127.0.0.1:8080`
+- local backend stays on `http://127.0.0.1:51880`
 - companion keeps using the local backend unless told otherwise
 
 ## Fast Deployment Script

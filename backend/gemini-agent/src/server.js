@@ -2,7 +2,7 @@ import http from "node:http";
 import { createApp } from "./app.js";
 import { attachLiveGateway } from "./liveGateway.js";
 
-const port = Number(process.env.PORT || 8080);
+const port = Number(process.env.PORT || 51880);
 const app = createApp();
 const server = http.createServer(app);
 attachLiveGateway(server);

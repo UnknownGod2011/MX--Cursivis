@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Match the supported Logi Plugin Service runtime that supplies PluginApi.dll. -->
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <RootNamespace>Loupedeck.CursivisPlugin</RootNamespace>
@@ -35,6 +36,8 @@
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
       <Private>false</Private>
+      <CopyLocal>false</CopyLocal>
+      <ExcludeFromPackaging>true</ExcludeFromPackaging>
     </Reference>
   </ItemGroup>
 
@@ -42,6 +45,12 @@
     <Error
       Condition="Exists('$(OutputPath)PluginApi.dll')"
       Text="PluginApi.dll is supplied by Logi Plugin Service and must not be copied into plugin output." />
+  </Target>
+
+  <Target Name="RemoveRetiredPackageAssets" BeforeTargets="CopyPackage">
+    <!-- Never allow retired transport actions back into a package through a stale build directory. -->
+    <Delete Files="$(OutputPath)..\icontemplates\Loupedeck.CursivisPlugin.CursivisLongPressStartCommand.ict" />
+    <Delete Files="$(OutputPath)..\icontemplates\Loupedeck.CursivisPlugin.CursivisLongPressEndCommand.ict" />
   </Target>
 
   <Target Name="CopyPackage" AfterTargets="PostBuildEvent">

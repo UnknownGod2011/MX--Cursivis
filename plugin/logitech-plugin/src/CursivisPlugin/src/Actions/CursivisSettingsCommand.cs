@@ -2,10 +2,10 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisSettingsCommand : PluginDynamicCommand
+    public class CursivisSettingsCommand : CompanionAwareCommand
     {
         public CursivisSettingsCommand()
-            : base(displayName: "Cursivis Settings", description: "Open the Cursivis companion settings window", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
+            : base(displayName: "Cursivis Settings", description: "Open Cursivis settings or download the Companion setup", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily, isRecoveryAction: true)
         {
         }
 

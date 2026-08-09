@@ -18,7 +18,7 @@ description: Bring intelligence to your cursor with selection-aware MX actions a
 pluginFileName: CursivisPlugin.dll
 
 # Plugin version.
-version: 1.5.0
+version: 1.5.2
 
 # Author of the plugin. The author can be a company or an individual developer.
 author: Tanush Shah
@@ -49,9 +49,7 @@ supportedDevices:
 # List of plugin capabilities.
 pluginCapabilities:
     - HasHapticsMapping
-
-    # Uncomment the following line if this plugin is an application plugin.
-    #- HasApplication
+    - HasApplication
 
     # Uncomment the following line if the plugin sends keyboard shortcuts to the target application.
     #- ActivatesApplication

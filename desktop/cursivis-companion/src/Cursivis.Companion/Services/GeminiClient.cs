@@ -43,7 +43,7 @@ public sealed class GeminiClient : IDisposable
     public GeminiClient()
     {
         var backendUrl = Environment.GetEnvironmentVariable("CURSIVIS_BACKEND_URL")
-            ?? "http://127.0.0.1:8080";
+            ?? "http://127.0.0.1:51880";
         var backendUri = new Uri(backendUrl);
 
         _httpClient = new HttpClient

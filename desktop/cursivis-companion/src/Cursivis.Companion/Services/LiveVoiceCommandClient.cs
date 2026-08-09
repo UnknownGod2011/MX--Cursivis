@@ -19,7 +19,7 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
         var endpoint = Environment.GetEnvironmentVariable("CURSIVIS_LIVE_VOICE_URL")
-            ?? "ws://127.0.0.1:8080/live";
+            ?? "ws://127.0.0.1:51880/live";
 
         await _socket.ConnectAsync(new Uri(endpoint), cancellationToken);
         _receiveLoop = Task.Run(() => ReceiveLoopAsync(CancellationToken.None));

@@ -416,7 +416,8 @@ internal static class TriggerDispatchClient
 
         TryStartCompanion();
 
-        var deadline = DateTime.UtcNow.AddSeconds(180);
+        // Allow a cold Companion start, but keep the background hotkey listener responsive.
+        var deadline = DateTime.UtcNow.AddSeconds(20);
         while (DateTime.UtcNow < deadline)
         {
             socket = await TryConnectAsync();

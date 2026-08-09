@@ -2,7 +2,7 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisTakeActionCommand : PluginDynamicCommand
+    public class CursivisTakeActionCommand : CompanionAwareCommand
     {
         public CursivisTakeActionCommand()
             : base(displayName: "Cursivis Take Action", description: "Run direct take action on the current selection", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)

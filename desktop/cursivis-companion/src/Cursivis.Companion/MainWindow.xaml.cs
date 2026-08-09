@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private const int TakeActionHotkeyId = 0xCA12;
     private const int VoiceHotkeyId = 0xCA13;
     private const int WmHotKey = 0x0312;
+    private const int WmSysCommand = 0x0112;
+    private const int ScMinimize = 0xF020;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private readonly TriggerController _triggerController;
@@ -115,10 +117,22 @@ public partial class MainWindow : Window
         RefreshLogitechRuntimeStatus();
         _logitechStatusTimer.Start();
         SourceInitialized += MainWindow_OnSourceInitialized;
+        StateChanged += MainWindow_OnStateChanged;
         Closing += MainWindow_OnClosing;
     }
 
     public event EventHandler<bool>? HapticSoundPreferenceChanged;
+
+    public event EventHandler? DiagnosticsRepairRequested;
+
+    public void ShowDiagnosticsResult(RuntimeDiagnosticsResult result)
+    {
+        DiagnosticsRepairButton.IsEnabled = true;
+        DiagnosticsStatusText.Text = result.Summary;
+        StatusText.Text = result.IsHealthy
+            ? "Status: Diagnostics complete. Cursivis is ready."
+            : "Status: Diagnostics found a runtime issue.";
+    }
 
     public void UpdateLiveModeStatus(LiveModeStatusChangedEventArgs status)
     {
@@ -685,6 +699,13 @@ public partial class MainWindow : Window
     {
         _allowWindowClose = true;
         Application.Current.Shutdown();
+    }
+
+    private void DiagnosticsRepairButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        DiagnosticsRepairButton.IsEnabled = false;
+        DiagnosticsStatusText.Text = "Checking Cursivis services and repairing only what needs attention...";
+        DiagnosticsRepairRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private async void SetApiKeyButton_OnClick(object sender, RoutedEventArgs e)
@@ -1562,6 +1583,13 @@ public partial class MainWindow : Window
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        if (msg == WmSysCommand && (wParam.ToInt64() & 0xFFF0) == ScMinimize)
+        {
+            handled = true;
+            Hide();
+            return IntPtr.Zero;
+        }
+
         if (msg != WmHotKey)
         {
             return IntPtr.Zero;
@@ -1587,6 +1615,54 @@ public partial class MainWindow : Window
         }
 
         return IntPtr.Zero;
+    }
+
+    private void SettingsScrollViewer_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer || IsInputInsideApiKeyEditor(e.OriginalSource))
+        {
+            return;
+        }
+
+        const double wheelStep = 36;
+        var direction = e.Delta > 0 ? -1 : 1;
+        var targetOffset = Math.Clamp(
+            scrollViewer.VerticalOffset + (direction * wheelStep),
+            0,
+            scrollViewer.ScrollableHeight);
+
+        if (Math.Abs(targetOffset - scrollViewer.VerticalOffset) < 0.5)
+        {
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(targetOffset);
+        e.Handled = true;
+    }
+
+    private bool IsInputInsideApiKeyEditor(object? source)
+    {
+        if (source is not DependencyObject current)
+        {
+            return false;
+        }
+
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ApiKeyTextBox))
+            {
+                return true;
+            }
+
+            current = current switch
+            {
+                System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D =>
+                    System.Windows.Media.VisualTreeHelper.GetParent(current),
+                _ => LogicalTreeHelper.GetParent(current)
+            };
+        }
+
+        return false;
     }
 
     private void TriggerControllerOnActionChange(object? sender, string action)
@@ -2499,16 +2575,33 @@ public partial class MainWindow : Window
     {
         Opacity = 1;
         ShowInTaskbar = false;
+        WindowState = WindowState.Normal;
 
         if (!IsVisible)
         {
             Show();
         }
 
-        WindowState = WindowState.Normal;
+        NativeMethods.BringToFront(new WindowInteropHelper(this).Handle);
         Topmost = true;
         Activate();
         Focus();
+
+        // A minimize request is settled asynchronously before the window is hidden. If a
+        // Settings request arrives at that boundary, reassert visibility after the queued
+        // minimize work so the first reopen request cannot be swallowed.
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            WindowState = WindowState.Normal;
+            if (!IsVisible)
+            {
+                Show();
+            }
+
+            NativeMethods.BringToFront(new WindowInteropHelper(this).Handle);
+            Activate();
+            Focus();
+        }, DispatcherPriority.ApplicationIdle);
 
         _ = Dispatcher.BeginInvoke(() =>
         {
@@ -2644,6 +2737,23 @@ public partial class MainWindow : Window
 
         e.Cancel = true;
         Hide();
+    }
+
+    private void MainWindow_OnStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized)
+        {
+            return;
+        }
+
+        // Let the native minimize operation settle, then restore and hide in one callback.
+        // Keeping the hide operation in the same callback prevents a stale deferred hide
+        // from swallowing the next Settings-open request.
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            WindowState = WindowState.Normal;
+            Hide();
+        }, DispatcherPriority.Background);
     }
 
     private void ApiKeyTextBox_OnPaste(object sender, DataObjectPastingEventArgs e)

@@ -9,8 +9,8 @@ COPY backend/gemini-agent/src ./src
 COPY shared/ipc-protocol ./shared/ipc-protocol
 
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=51880
 
-EXPOSE 8080
+EXPOSE 51880
 
 CMD ["node", "src/server.js"]

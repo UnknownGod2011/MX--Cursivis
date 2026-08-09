@@ -2,10 +2,10 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisSnipItCommand : PluginDynamicCommand
+    public class CursivisSnipItCommand : CompanionAwareCommand
     {
         public CursivisSnipItCommand()
-            : base(displayName: "Cursivis Snip-it", description: "Start image snipping for the current screen", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
+            : base(displayName: "Cursivis Snip", description: "Capture and understand part of the current screen", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
         {
         }
 

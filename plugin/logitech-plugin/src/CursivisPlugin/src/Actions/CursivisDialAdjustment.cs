@@ -2,10 +2,10 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisDialAdjustment : PluginDynamicAdjustment
+    public class CursivisDialAdjustment : CompanionAwareAdjustment
     {
         public CursivisDialAdjustment()
-            : base(displayName: "Cursivis Dial", description: "Rotate to move AI Action Ring, press to execute", groupName: "Cursivis", hasReset: false, supportedDevices: DeviceType.LoupedeckExtendedFamily)
+            : base(displayName: "Cursivis Action Ring", description: "Browse Cursivis actions with the dial, then press to run one", groupName: "Cursivis", hasReset: false, supportedDevices: DeviceType.LoupedeckExtendedFamily)
         {
         }
 

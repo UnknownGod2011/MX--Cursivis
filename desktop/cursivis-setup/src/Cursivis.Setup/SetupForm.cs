@@ -11,12 +11,11 @@ using System.Text.Json;
 
 public sealed class SetupForm : Form
 {
-    private const string DisplayVersion = "1.5.1";
-    private const string PackageVersion = "1_5_1";
+    private const string DisplayVersion = "1.5.2";
+    private const string PackageVersion = "1_5_2";
     private const string DefaultRuntimeZipUrl =
-        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.1/CursivisRuntime_1_5_1.zip";
-    private const string NodeVersion = "v22.22.0";
-    private static readonly string[] RuntimePayloadDirectories = ["app", "backend", "desktop", "shared"];
+        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.2/CursivisRuntime_1_5_2.zip";
+    private static readonly string[] RuntimePayloadDirectories = ["app", "backend", "desktop", "node", "shared"];
     private static readonly string RuntimeZipUrl =
         typeof(SetupForm).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -38,6 +37,7 @@ public sealed class SetupForm : Form
     private readonly ProgressBar progressBar = new();
     private readonly TextBox logBox = new();
     private readonly Button closeButton = new();
+    private readonly Button detailsButton = new();
     private readonly CancellationTokenSource cancellation = new();
     private readonly object logFileLock = new();
     private readonly string logFilePath = Path.Combine(
@@ -47,17 +47,23 @@ public sealed class SetupForm : Form
         "setup.log");
 
     private bool started;
+    private bool installationFinished;
 
     public SetupForm()
     {
         Text = "Cursivis Companion Setup";
-        Width = 720;
-        Height = 520;
-        MinimumSize = new Size(620, 460);
+        Width = 680;
+        Height = 392;
+        MinimumSize = new Size(580, 350);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(15, 18, 24);
-        ForeColor = Color.White;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        BackColor = SystemColors.Window;
+        ForeColor = Color.FromArgb(24, 28, 34);
         Font = new Font("Segoe UI", 10F);
+        Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? Application.ExecutablePath)
+            ?? SystemIcons.Application;
 
         var title = new Label
         {
@@ -66,32 +72,33 @@ public sealed class SetupForm : Form
             Height = 44,
             Dock = DockStyle.Top,
             Font = new Font("Segoe UI Semibold", 20F),
-            ForeColor = Color.White
+            ForeColor = Color.FromArgb(20, 24, 30)
         };
 
         var intro = new Label
         {
             Text = "Thanks for installing the Cursivis Logitech plugin. This setup adds Companion, AI runtime services, Live Mode, and the startup connection used by your Logitech triggers.",
             AutoSize = false,
-            Height = 62,
+            Height = 64,
             Dock = DockStyle.Top,
-            ForeColor = Color.FromArgb(198, 205, 216)
+            ForeColor = Color.FromArgb(82, 91, 102)
         };
 
         statusLabel.Text = "Preparing setup...";
         statusLabel.AutoSize = false;
-        statusLabel.Height = 30;
+        statusLabel.Height = 34;
         statusLabel.Dock = DockStyle.Top;
         statusLabel.Font = new Font("Segoe UI Semibold", 12F);
 
         detailLabel.Text = "This may take a few minutes on the first install.";
         detailLabel.AutoSize = false;
-        detailLabel.Height = 28;
+        detailLabel.Height = 46;
         detailLabel.Dock = DockStyle.Top;
-        detailLabel.ForeColor = Color.FromArgb(178, 185, 196);
+        detailLabel.ForeColor = Color.FromArgb(92, 101, 112);
 
         progressBar.Dock = DockStyle.Top;
         progressBar.Height = 10;
+        progressBar.Margin = new Padding(0, 4, 0, 8);
         progressBar.Style = ProgressBarStyle.Continuous;
 
         logBox.Dock = DockStyle.Fill;
@@ -99,16 +106,32 @@ public sealed class SetupForm : Form
         logBox.ReadOnly = true;
         logBox.ScrollBars = ScrollBars.Vertical;
         logBox.BorderStyle = BorderStyle.FixedSingle;
-        logBox.BackColor = Color.FromArgb(22, 27, 35);
-        logBox.ForeColor = Color.FromArgb(226, 231, 240);
+        logBox.BackColor = Color.FromArgb(248, 250, 252);
+        logBox.ForeColor = Color.FromArgb(38, 45, 54);
         logBox.Font = new Font("Consolas", 9F);
+        logBox.Visible = false;
 
-        closeButton.Text = "Close";
-        closeButton.Enabled = false;
+        closeButton.Text = "Cancel";
+        closeButton.Enabled = true;
         closeButton.Width = 120;
         closeButton.Height = 38;
         closeButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-        closeButton.Click += (_, _) => Close();
+        closeButton.Click += (_, _) =>
+        {
+            if (!installationFinished)
+            {
+                cancellation.Cancel();
+            }
+
+            Close();
+        };
+
+        detailsButton.Text = "Details";
+        detailsButton.Width = 104;
+        detailsButton.Height = 38;
+        detailsButton.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+        detailsButton.FlatStyle = FlatStyle.System;
+        detailsButton.Click += (_, _) => ToggleDetails();
 
         var buttonPanel = new Panel
         {
@@ -117,16 +140,19 @@ public sealed class SetupForm : Form
             Padding = new Padding(0, 10, 0, 0)
         };
         buttonPanel.Controls.Add(closeButton);
+        buttonPanel.Controls.Add(detailsButton);
         buttonPanel.Resize += (_, _) =>
         {
             closeButton.Left = buttonPanel.Width - closeButton.Width;
             closeButton.Top = 10;
+            detailsButton.Left = 0;
+            detailsButton.Top = 10;
         };
 
         var content = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(28)
+            Padding = new Padding(28, 24, 28, 22)
         };
         content.Controls.Add(logBox);
         content.Controls.Add(buttonPanel);
@@ -155,42 +181,47 @@ public sealed class SetupForm : Form
         try
         {
             await InstallAsync(cancellation.Token);
-            SetStatus("Setup complete", "Cursivis is ready. Open Settings, add a Gemini API key, then use Talk, Go, Snip, Prompt Optimizer, or Live Mode.");
+            HideDetails();
+            SetStatus("Setup complete", "Cursivis is ready. Open Settings to add a Gemini API key, then start using Cursivis.");
             Log("Done. You can close this setup window.");
         }
         catch (OperationCanceledException)
         {
-            SetStatus("Setup cancelled", "No further changes are being made.");
+            SetStatus("Setup cancelled", "No changes were made to your active Cursivis installation.");
             Log("Setup cancelled.");
         }
         catch (Exception ex)
         {
-            SetStatus("Setup needs attention", ex.Message);
+            SetStatus("Setup needs attention", "Cursivis could not finish setup. Your previous installation is still available. Select Details if you need to share the support log.");
             Log("ERROR: " + ex);
-            MessageBox.Show(this, ex.Message, "Cursivis setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ShowDetails();
         }
         finally
         {
             progressBar.Style = ProgressBarStyle.Continuous;
+            installationFinished = true;
+            closeButton.Text = "Close";
             closeButton.Enabled = true;
         }
     }
 
     private async Task InstallAsync(CancellationToken token)
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), "CursivisSetup", PackageVersion);
+        var tempRoot = Path.Combine(Path.GetTempPath(), "CursivisSetup", PackageVersion, Guid.NewGuid().ToString("N"));
         var zipPath = Path.Combine(tempRoot, $"CursivisRuntime_{PackageVersion}.zip");
         var extractRoot = Path.Combine(tempRoot, "extracted");
         var programsRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Programs");
         var installRoot = Path.Combine(programsRoot, "Cursivis");
-        var stagingRoot = Path.Combine(programsRoot, $"Cursivis.staging.{PackageVersion}");
-        var backupRoot = Path.Combine(programsRoot, $"Cursivis.backup.{PackageVersion}");
+        var legacyStagingRoot = Path.Combine(programsRoot, $"Cursivis.staging.{PackageVersion}");
+        var legacyBackupRoot = Path.Combine(programsRoot, $"Cursivis.backup.{PackageVersion}");
+        var stagingRoot = CreateUpdateRoot(programsRoot, $"Cursivis.staging.{PackageVersion}");
+        var backupRoot = CreateUpdateRoot(programsRoot, $"Cursivis.backup.{PackageVersion}");
         var runtimeCommitted = false;
         var previousRuntimeExisted = false;
 
-        RecoverInterruptedUpdate(installRoot, stagingRoot, backupRoot);
+        RecoverInterruptedUpdate(installRoot, legacyStagingRoot, legacyBackupRoot);
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -199,7 +230,7 @@ public sealed class SetupForm : Form
             await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
 
             SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
-            TryDeleteDirectory(extractRoot);
+            DeleteDirectoryOrThrow(extractRoot, "temporary extraction files");
             ZipFile.ExtractToDirectory(zipPath, extractRoot);
 
             var packageRoot = Path.Combine(extractRoot, $"CursivisRuntime_{PackageVersion}");
@@ -211,23 +242,46 @@ public sealed class SetupForm : Form
             ValidateRuntimePayload(payloadRoot);
 
             SetStatus("Step 3 of 5: Staging runtime files", "Preparing the update without changing your working installation.");
-            TryDeleteDirectory(stagingRoot);
-            TryDeleteDirectory(backupRoot);
             CopyDirectory(payloadRoot, stagingRoot);
             ValidateRuntimePayload(stagingRoot);
 
-            SetStatus("Step 4 of 5: Preparing backend", "Installing local backend dependencies before activating the update.");
-            var nodeExe = await EnsurePortableNodeAsync(installRoot, token);
-            await InvokeNpmAsync(nodeExe, Path.Combine(stagingRoot, "backend", "gemini-agent"), token);
-            await InvokeNpmAsync(nodeExe, Path.Combine(stagingRoot, "desktop", "browser-action-agent"), token);
+            SetStatus("Step 4 of 5: Verifying runtime", "Checking the bundled backend and Live Mode dependencies.");
+            ValidateRuntimePayload(stagingRoot);
 
             SetStatus("Step 5 of 5: Activating update", "Stopping the old runtime briefly and switching to the verified files.");
             StopInstalledRuntimeProcesses(installRoot);
             StopCursivisPortListeners(installRoot);
             PreserveMutableRuntimeData(installRoot, stagingRoot);
             previousRuntimeExisted = HasValidRuntimePayload(installRoot);
-            CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
-            runtimeCommitted = true;
+            try
+            {
+                CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
+                runtimeCommitted = true;
+            }
+            catch (Exception commitError)
+            {
+                Log("Update activation was blocked. Restarting the previous runtime.");
+                if (previousRuntimeExisted && HasValidRuntimePayload(installRoot))
+                {
+                    try
+                    {
+                        LaunchCompanion(installRoot);
+                        LaunchHotkeyHost(installRoot);
+                        await WaitForRuntimeServicesAsync(CancellationToken.None);
+                        Log("Previous runtime restarted successfully.");
+                    }
+                    catch (Exception recoveryError)
+                    {
+                        throw new InvalidOperationException(
+                            "Windows blocked the update. The previous runtime was restored but could not restart automatically.",
+                            new AggregateException(commitError, recoveryError));
+                    }
+                }
+
+                throw new InvalidOperationException(
+                    "Windows blocked the update, so the previous working runtime was restored and restarted.",
+                    commitError);
+            }
 
             try
             {
@@ -240,7 +294,10 @@ public sealed class SetupForm : Form
                 SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
                 await WaitForRuntimeServicesAsync(token);
                 Log("Companion backend and browser services are ready.");
-                TryDeleteDirectory(backupRoot);
+                if (!TryDeleteDirectory(backupRoot))
+                {
+                    Log("The previous runtime backup is still in use and will be cleaned up during a later update.");
+                }
             }
             catch (Exception activationError)
             {
@@ -265,97 +322,12 @@ public sealed class SetupForm : Form
         }
         finally
         {
-            TryDeleteDirectory(stagingRoot);
+            _ = TryDeleteDirectory(stagingRoot);
             if (!runtimeCommitted)
             {
-                TryDeleteDirectory(backupRoot);
+                _ = TryDeleteDirectory(backupRoot);
             }
-            TryDeleteDirectory(tempRoot);
-        }
-    }
-
-    private async Task<string> EnsurePortableNodeAsync(string installRoot, CancellationToken token)
-    {
-        var nodeDir = Path.Combine(installRoot, "node");
-        var nodeExe = Path.Combine(nodeDir, "node.exe");
-        if (File.Exists(nodeExe))
-        {
-            Log("Portable Node.js already installed.");
-            return nodeExe;
-        }
-
-        Directory.CreateDirectory(nodeDir);
-        var archiveName = $"node-{NodeVersion}-win-x64.zip";
-        var archiveUrl = $"https://nodejs.org/dist/{NodeVersion}/{archiveName}";
-        var downloadPath = Path.Combine(Path.GetTempPath(), archiveName);
-        var extractRoot = Path.Combine(Path.GetTempPath(), $"cursivis-node-{NodeVersion}");
-
-        SetStatus("Step 4 of 5: Downloading portable Node.js", "Cursivis uses a private portable Node runtime so users do not need developer tools.");
-        await DownloadFileAsync(archiveUrl, downloadPath, expectedSha256: null, token);
-
-        if (Directory.Exists(extractRoot))
-        {
-            Directory.Delete(extractRoot, recursive: true);
-        }
-        ZipFile.ExtractToDirectory(downloadPath, extractRoot);
-
-        var expanded = Directory.GetDirectories(extractRoot).FirstOrDefault()
-            ?? throw new InvalidOperationException("Node.js archive did not contain the expected folder.");
-        CopyDirectory(expanded, nodeDir);
-        return nodeExe;
-    }
-
-    private async Task InvokeNpmAsync(string nodeExe, string projectDir, CancellationToken token)
-    {
-        var packageJson = Path.Combine(projectDir, "package.json");
-        if (!File.Exists(packageJson))
-        {
-            return;
-        }
-
-        var npmCli = Path.Combine(Path.GetDirectoryName(nodeExe)!, "node_modules", "npm", "bin", "npm-cli.js");
-        if (!File.Exists(npmCli))
-        {
-            throw new InvalidOperationException("npm was not found in the portable Node.js folder.");
-        }
-
-        var hasLock = File.Exists(Path.Combine(projectDir, "package-lock.json"));
-        var args = hasLock
-            ? $"\"{npmCli}\" ci --omit=dev"
-            : $"\"{npmCli}\" install --omit=dev";
-
-        await RunProcessAsync(nodeExe, args, projectDir, token);
-    }
-
-    private async Task RunProcessAsync(string fileName, string arguments, string workingDirectory, CancellationToken token)
-    {
-        Log($"> {Path.GetFileName(fileName)} {arguments}");
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-
-        using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) Log(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) Log(e.Data); };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException($"Could not start {fileName}.");
-        }
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        await process.WaitForExitAsync(token);
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"{Path.GetFileName(fileName)} failed with exit code {process.ExitCode}.");
+            _ = TryDeleteDirectory(tempRoot);
         }
     }
 
@@ -471,6 +443,31 @@ public sealed class SetupForm : Form
             HttpStatusCode.Gone;
     }
 
+    private void ToggleDetails()
+    {
+        if (logBox.Visible)
+        {
+            HideDetails();
+            return;
+        }
+
+        ShowDetails();
+    }
+
+    private void ShowDetails()
+    {
+        logBox.Visible = true;
+        detailsButton.Text = "Hide Details";
+        Height = Math.Max(Height, 570);
+    }
+
+    private void HideDetails()
+    {
+        logBox.Visible = false;
+        detailsButton.Text = "Details";
+        Height = Math.Max(MinimumSize.Height, 392);
+    }
+
     private static void VerifySha256(string path, string expectedSha256)
     {
         if (expectedSha256.Length != 64 ||
@@ -512,6 +509,7 @@ public sealed class SetupForm : Form
             Path.Combine("app", "companion", "Cursivis.Companion.exe"),
             Path.Combine("app", "hotkey-host", "Cursivis.HotkeyHost.exe"),
             Path.Combine("app", "trigger-launcher", "Cursivis.TriggerLauncher.exe"),
+            Path.Combine("node", "node.exe"),
             Path.Combine("backend", "gemini-agent", "src", "server.js"),
             Path.Combine("desktop", "browser-action-agent", "src", "server.js"),
             Path.Combine("desktop", "browser-extension-chromium", "manifest.json"),
@@ -527,11 +525,28 @@ public sealed class SetupForm : Form
             throw new InvalidDataException(
                 "The downloaded runtime package is incomplete. Missing: " + string.Join(", ", missing));
         }
+
+        var requiredDirectories = new[]
+        {
+            Path.Combine("backend", "gemini-agent", "node_modules"),
+            Path.Combine("desktop", "browser-action-agent", "node_modules")
+        };
+        var missingDirectories = requiredDirectories
+            .Where(relativePath => !Directory.Exists(Path.Combine(payloadRoot, relativePath)))
+            .ToArray();
+        if (missingDirectories.Length > 0)
+        {
+            throw new InvalidDataException(
+                "The downloaded runtime package is missing prepared dependencies: " + string.Join(", ", missingDirectories));
+        }
     }
 
     private void RecoverInterruptedUpdate(string installRoot, string stagingRoot, string backupRoot)
     {
-        TryDeleteDirectory(stagingRoot);
+        if (!TryDeleteDirectory(stagingRoot))
+        {
+            Log("A stale staging folder is still in use and will be cleaned up during a later update.");
+        }
         if (!Directory.Exists(backupRoot))
         {
             return;
@@ -540,7 +555,10 @@ public sealed class SetupForm : Form
         if (HasValidRuntimePayload(installRoot))
         {
             Log("Removing stale update backup after a previously completed install.");
-            TryDeleteDirectory(backupRoot);
+            if (!TryDeleteDirectory(backupRoot))
+            {
+                Log("The stale backup is still in use. This update will use its own isolated backup folder.");
+            }
             return;
         }
 
@@ -566,7 +584,7 @@ public sealed class SetupForm : Form
                 continue;
             }
 
-            TryDeleteDirectory(destination);
+            DeleteDirectoryOrThrow(destination, "preserved browser data");
             CopyDirectory(source, destination);
         }
     }
@@ -604,7 +622,7 @@ public sealed class SetupForm : Form
         {
             foreach (var name in movedNewDirectories.AsEnumerable().Reverse())
             {
-                TryDeleteDirectory(RequireChildPath(installRoot, name));
+                DeleteDirectoryOrThrow(RequireChildPath(installRoot, name), "partially activated runtime files");
             }
 
             foreach (var name in movedOldDirectories.AsEnumerable().Reverse())
@@ -627,7 +645,7 @@ public sealed class SetupForm : Form
         {
             var installed = RequireChildPath(installRoot, name);
             var backup = RequireChildPath(backupRoot, name);
-            TryDeleteDirectory(installed);
+            DeleteDirectoryOrThrow(installed, "runtime files being restored");
             if (Directory.Exists(backup))
             {
                 Directory.Move(backup, installed);
@@ -662,11 +680,80 @@ public sealed class SetupForm : Form
         return target;
     }
 
-    private static void TryDeleteDirectory(string path)
+    private static string CreateUpdateRoot(string parent, string baseName)
     {
-        if (Directory.Exists(path))
+        var candidate = Path.Combine(parent, baseName);
+        if (!Directory.Exists(candidate))
         {
-            Directory.Delete(path, recursive: true);
+            return candidate;
+        }
+
+        return Path.Combine(parent, $"{baseName}.{DateTime.UtcNow:yyyyMMddHHmmss}.{Guid.NewGuid():N}");
+    }
+
+    private static void DeleteDirectoryOrThrow(string path, string description)
+    {
+        if (!TryDeleteDirectory(path))
+        {
+            throw new IOException($"Cursivis could not remove {description}. Close any Cursivis setup windows and try again.");
+        }
+    }
+
+    private static bool TryDeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return true;
+        }
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                ClearReadOnlyAttributes(path);
+                Directory.Delete(path, recursive: true);
+                return !Directory.Exists(path);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(250 * (attempt + 1)));
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(250 * (attempt + 1)));
+            }
+        }
+
+        return !Directory.Exists(path);
+    }
+
+    private static void ClearReadOnlyAttributes(string root)
+    {
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories).Append(root))
+            {
+                try
+                {
+                    File.SetAttributes(entry, FileAttributes.Normal);
+                }
+                catch (IOException)
+                {
+                    // A locked file will be retried by the caller's bounded delete loop.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // A locked file will be retried by the caller's bounded delete loop.
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Enumeration can race with antivirus or a closing process; delete handles retries.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Enumeration can race with antivirus or a closing process; delete handles retries.
         }
     }
 
@@ -724,7 +811,7 @@ public sealed class SetupForm : Form
 
     private void StopCursivisPortListeners(string installRoot)
     {
-        var reservedPorts = new HashSet<string>(StringComparer.Ordinal) { "8080", "48820", "48830" };
+        var reservedPorts = new HashSet<string>(StringComparer.Ordinal) { "51880", "48820", "48830" };
         var pids = new HashSet<int>();
         var normalizedRoot = Path.GetFullPath(installRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
@@ -871,7 +958,7 @@ public sealed class SetupForm : Form
     {
         var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "http://127.0.0.1:8080/health",
+            "http://127.0.0.1:51880/health",
             "http://127.0.0.1:48820/health",
             "http://127.0.0.1:48830/health"
         };
@@ -932,6 +1019,17 @@ public sealed class SetupForm : Form
             return fallback;
         }
 
+        string ExistingBackendUrl()
+        {
+            var configured = ExistingString("backendUrl", string.Empty).TrimEnd('/');
+            // Migrate the former common Docker port without overwriting intentional custom endpoints.
+            return string.Equals(configured, "http://127.0.0.1:8080", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(configured, "http://localhost:8080", StringComparison.OrdinalIgnoreCase) ||
+                   string.IsNullOrWhiteSpace(configured)
+                ? "http://127.0.0.1:51880"
+                : configured;
+        }
+
         object ExistingValue(string name, object fallback)
         {
             if (existing is not null && existing.RootElement.TryGetProperty(name, out var value))
@@ -957,7 +1055,7 @@ public sealed class SetupForm : Form
             ["companionProject"] = "",
             ["companionExecutable"] = Path.Combine(root, "app", "companion", "Cursivis.Companion.exe"),
             ["hotkeyHostExecutable"] = Path.Combine(root, "app", "hotkey-host", "Cursivis.HotkeyHost.exe"),
-            ["backendUrl"] = "http://127.0.0.1:8080",
+            ["backendUrl"] = ExistingBackendUrl(),
             ["browserAgentUrl"] = "http://127.0.0.1:48820",
             ["extensionBridgeUrl"] = "http://127.0.0.1:48830",
             ["aiProvider"] = ExistingString("aiProvider", "gemini"),

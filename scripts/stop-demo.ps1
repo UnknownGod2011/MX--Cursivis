@@ -57,7 +57,7 @@ foreach ($proc in $targets) {
 }
 
 try {
-    $listening = netstat -ano | Select-String "LISTENING" | Select-String ":8080|:48820|:48830"
+    $listening = netstat -ano | Select-String "LISTENING" | Select-String ":51880|:48820|:48830"
     $handledPortPids = [System.Collections.Generic.HashSet[int]]::new()
     foreach ($entry in $listening) {
         $parts = ($entry -split '\s+') | Where-Object { $_ -ne '' }

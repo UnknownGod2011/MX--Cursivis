@@ -4,6 +4,8 @@ using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
 using System.Net.WebSockets;
+using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -36,6 +38,8 @@ public partial class App : Application
     private bool _playHapticSound;
     private CancellationTokenSource? _ipcLongPressCts;
     private Task? _ipcLongPressTask;
+    private TrayIconService? _trayIconService;
+    private bool _hapticEventsAttached;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -158,9 +162,7 @@ public partial class App : Application
 
             try
             {
-                _triggerIpcServer = new TriggerIpcServer();
-                _triggerIpcServer.TriggerReceived += TriggerIpcServerOnTriggerReceived;
-                _triggerIpcServer.Start();
+                EnsureTriggerIpcServerRunning();
             }
             catch (Exception ipcEx)
             {
@@ -171,12 +173,7 @@ public partial class App : Application
 
             try
             {
-                _hapticEventHub = new HapticEventHub();
-                _hapticEventHub.Start();
-                _triggerController.OnActionChange += TriggerControllerOnActionChange;
-                _triggerController.OnActionExecute += TriggerControllerOnActionExecute;
-                _triggerController.OnProcessingStart += TriggerControllerOnProcessingStart;
-                _triggerController.OnProcessingComplete += TriggerControllerOnProcessingComplete;
+                EnsureHapticEventHubRunning();
             }
             catch (Exception hapticEx)
             {
@@ -184,6 +181,8 @@ public partial class App : Application
                     $"Haptic channel unavailable: {hapticEx.Message}",
                     new Point(40, 80));
             }
+
+            InitializeTrayIcon();
         }
         catch (Exception ex)
         {
@@ -302,6 +301,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _trayIconService?.Dispose();
+        _trayIconService = null;
         _triggerController?.Dispose();
         _cursorTracker?.Dispose();
         _windowFocusTracker?.Dispose();
@@ -325,6 +326,7 @@ public partial class App : Application
         if (_mainWindow is not null)
         {
             _mainWindow.HapticSoundPreferenceChanged -= MainWindowOnHapticSoundPreferenceChanged;
+            _mainWindow.DiagnosticsRepairRequested -= MainWindowOnDiagnosticsRepairRequested;
         }
 
         if (_triggerController is not null)
@@ -469,9 +471,121 @@ public partial class App : Application
             companionSettings,
             _liveModeCoordinator);
         _mainWindow.HapticSoundPreferenceChanged += MainWindowOnHapticSoundPreferenceChanged;
+        _mainWindow.DiagnosticsRepairRequested += MainWindowOnDiagnosticsRepairRequested;
         _windowFocusTracker?.RegisterCompanionWindow(_mainWindow);
         MainWindow = _mainWindow;
         return _mainWindow;
+    }
+
+    private void InitializeTrayIcon()
+    {
+        _trayIconService?.Dispose();
+        _trayIconService = new TrayIconService(
+            () => Dispatcher.Invoke(ShowSettingsWindow),
+            RunDiagnosticsFromTrayAsync,
+            OpenLogsFolder,
+            () => Dispatcher.Invoke(Shutdown));
+    }
+
+    private async Task RunDiagnosticsFromTrayAsync()
+    {
+        var result = await DiagnoseAndRepairAsync();
+        await Dispatcher.InvokeAsync(() =>
+        {
+            ShowSettingsWindow();
+            _mainWindow?.ShowDiagnosticsResult(result);
+        });
+    }
+
+    private async void MainWindowOnDiagnosticsRepairRequested(object? sender, EventArgs e)
+    {
+        try
+        {
+            var result = await DiagnoseAndRepairAsync();
+            _mainWindow?.ShowDiagnosticsResult(result);
+        }
+        catch
+        {
+            _mainWindow?.ShowDiagnosticsResult(RuntimeDiagnosticsResult.NeedsRepair(
+                "Diagnostics could not complete. Run the latest Companion Setup to repair Cursivis."));
+        }
+    }
+
+    private async Task<RuntimeDiagnosticsResult> DiagnoseAndRepairAsync()
+    {
+        var diagnostics = new RuntimeDiagnosticsService();
+        var initialResult = await diagnostics.DiagnoseAndRepairAsync();
+        if (!initialResult.IsHealthy && initialResult.Details.Count == 0)
+        {
+            return initialResult;
+        }
+
+        try
+        {
+            EnsureTriggerIpcServerRunning();
+            EnsureHapticEventHubRunning();
+        }
+        catch
+        {
+            return RuntimeDiagnosticsResult.NeedsRepair(
+                "Cursivis could not restore its local trigger connection. Run the latest Companion Setup to repair it.");
+        }
+
+        return await diagnostics.DiagnoseAndRepairAsync();
+    }
+
+    private void EnsureTriggerIpcServerRunning()
+    {
+        if (_triggerIpcServer?.IsListening == true)
+        {
+            return;
+        }
+
+        if (_triggerIpcServer is not null)
+        {
+            _triggerIpcServer.TriggerReceived -= TriggerIpcServerOnTriggerReceived;
+            _triggerIpcServer.Dispose();
+        }
+
+        _triggerIpcServer = new TriggerIpcServer();
+        _triggerIpcServer.TriggerReceived += TriggerIpcServerOnTriggerReceived;
+        _triggerIpcServer.Start();
+    }
+
+    private void EnsureHapticEventHubRunning()
+    {
+        if (_hapticEventHub?.IsListening != true)
+        {
+            _hapticEventHub?.Dispose();
+            _hapticEventHub = new HapticEventHub();
+            _hapticEventHub.Start();
+        }
+
+        if (_hapticEventsAttached || _triggerController is null)
+        {
+            return;
+        }
+
+        _triggerController.OnActionChange += TriggerControllerOnActionChange;
+        _triggerController.OnActionExecute += TriggerControllerOnActionExecute;
+        _triggerController.OnProcessingStart += TriggerControllerOnProcessingStart;
+        _triggerController.OnProcessingComplete += TriggerControllerOnProcessingComplete;
+        _hapticEventsAttached = true;
+    }
+
+    private static void OpenLogsFolder()
+    {
+        var logDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Cursivis",
+            "Logs");
+        Directory.CreateDirectory(logDirectory);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"\"{logDirectory}\"",
+            UseShellExecute = true,
+        });
     }
 
     private void ResultPanelWindowOnSettingsRequested(object? sender, EventArgs e)

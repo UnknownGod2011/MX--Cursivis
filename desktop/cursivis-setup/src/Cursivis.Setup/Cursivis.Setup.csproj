@@ -8,10 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CursivisCompanionSetup</AssemblyName>
     <RootNamespace>Cursivis.Setup</RootNamespace>
-    <Version>1.5.1</Version>
+    <Version>1.5.2</Version>
     <Authors>Tanush Shah</Authors>
     <Product>Cursivis Companion Setup</Product>
     <Description>One-click setup for the Cursivis Companion runtime.</Description>
+    <ApplicationIcon>Assets\cursivis-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(CursivisRuntimeSha256)' != ''">
@@ -20,6 +21,10 @@
 
   <ItemGroup Condition="'$(CursivisRuntimeUrl)' != ''">
     <AssemblyMetadata Include="CursivisRuntimeUrl" Value="$(CursivisRuntimeUrl)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\cursivis-icon.ico" />
   </ItemGroup>
 
 </Project>

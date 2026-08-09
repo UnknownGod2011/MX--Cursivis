@@ -99,7 +99,8 @@ internal static class TriggerDispatchClient
 
         TryStartCompanion();
 
-        var deadline = DateTime.UtcNow.AddSeconds(180);
+        // Allow a cold Companion start, but never leave a user trigger blocked for minutes.
+        var deadline = DateTime.UtcNow.AddSeconds(20);
         while (DateTime.UtcNow < deadline)
         {
             socket = await TryConnectAsync();

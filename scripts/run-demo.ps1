@@ -2,7 +2,7 @@ param(
     [switch]$WithBridge,
     [string]$ApiKey,
     [string[]]$ApiKeys,
-    [string]$BackendUrl = "http://127.0.0.1:8080",
+    [string]$BackendUrl = "http://127.0.0.1:51880",
     [switch]$EnableStreamingTranscription,
     [switch]$EnableAutoReplace,
     [double]$AutoReplaceConfidence = 0.90,
@@ -194,7 +194,7 @@ if (-not $NoHealthCheck) {
     $deadline = (Get-Date).AddSeconds(40)
     while ((Get-Date) -lt $deadline) {
         try {
-            $health = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8080/health" -TimeoutSec 4
+            $health = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:51880/health" -TimeoutSec 4
             if ($health.StatusCode -eq 200) {
                 $healthOk = $true
                 Write-Host "Backend health: OK"

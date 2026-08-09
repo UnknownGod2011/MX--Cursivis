@@ -61,6 +61,7 @@ public sealed class RuntimeBootstrapper
 
         var environment = new Dictionary<string, string>
         {
+            ["PORT"] = ResolvePort(profile.BackendUrl).ToString(),
             ["CURSIVIS_AI_PROVIDER"] = NormalizeProviderId(profile.AiProvider),
             ["GEMINI_ROUTER_MODEL"] = "gemini-2.5-flash-lite",
             ["GEMINI_OPTIONS_MODEL"] = "gemini-2.5-flash-lite",
@@ -70,6 +71,14 @@ public sealed class RuntimeBootstrapper
 
         StartNodeServer(profile, profile.BackendDir, environment);
         await WaitForHealthyAsync($"{profile.BackendUrl.TrimEnd('/')}/health", TimeSpan.FromSeconds(30), cancellationToken);
+    }
+
+    private static int ResolvePort(string backendUrl)
+    {
+        return Uri.TryCreate(backendUrl, UriKind.Absolute, out var uri) &&
+               uri.Port is >= 1024 and <= 65535
+            ? uri.Port
+            : 51880;
     }
 
     private static async Task EnsureBrowserAgentAsync(RuntimeLaunchProfile profile, CancellationToken cancellationToken)
@@ -126,7 +135,11 @@ public sealed class RuntimeBootstrapper
         string scriptPath,
         IReadOnlyDictionary<string, string>? environment = null)
     {
-        var nodeExe = TryResolvePortableNodeExe(profile, projectDir) ?? "node";
+        var nodeExe = TryResolvePortableNodeExe(profile, projectDir);
+        if (string.IsNullOrWhiteSpace(nodeExe))
+        {
+            return;
+        }
 
         var psi = new ProcessStartInfo
         {

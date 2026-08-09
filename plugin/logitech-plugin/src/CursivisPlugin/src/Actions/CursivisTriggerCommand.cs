@@ -2,10 +2,10 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    public class CursivisTriggerCommand : PluginDynamicCommand
+    public class CursivisTriggerCommand : CompanionAwareCommand
     {
         public CursivisTriggerCommand()
-            : base(displayName: "Cursivis Trigger", description: "Send tap trigger to companion", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
+            : base(displayName: "Cursivis Go", description: "Understand the selected text or image", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
         {
         }
 

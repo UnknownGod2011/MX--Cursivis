@@ -25,7 +25,7 @@ Implemented runnable companion app in `src/Cursivis.Companion`.
 
 ## Run
 
-1. Ensure backend is running at `http://127.0.0.1:8080` or set `CURSIVIS_BACKEND_URL`
+1. Ensure backend is running at `http://127.0.0.1:51880` or set `CURSIVIS_BACKEND_URL`
 2. Ensure browser action agent is running at `http://127.0.0.1:48820` for managed-browser fallback
 3. If you want real current-tab `Take Action`, load the unpacked extension from `desktop/browser-extension-chromium/README.md`
 4. Start the companion:

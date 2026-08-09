@@ -1,6 +1,7 @@
 param(
-    [string]$Version = "1_5_1",
+    [string]$Version = "1_5_2",
     [string]$NodeVersion = "v22.22.0",
+    [string]$NodeSourceDirectory = "",
     [switch]$SkipDotnetPublish,
     [switch]$SkipZip,
     [switch]$SkipPluginPackage,
@@ -83,6 +84,147 @@ function Copy-CleanDirectory {
     }
 }
 
+function Get-NodeVersion {
+    param([Parameter(Mandatory = $true)][string]$NodeExe)
+
+    if (-not (Test-Path -LiteralPath $NodeExe)) {
+        return $null
+    }
+
+    try {
+        return ((& $NodeExe --version 2>$null | Select-Object -First 1).Trim())
+    }
+    catch {
+        return $null
+    }
+}
+
+function Resolve-PortableNodeSource {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string]$PreferredDirectory
+    )
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($PreferredDirectory)) {
+        $candidates += $PreferredDirectory
+    }
+
+    $candidates += Join-Path $env:LOCALAPPDATA "Programs\Cursivis\node"
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCommand) {
+        $candidates += Split-Path -Parent $nodeCommand.Source
+    }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        $nodeExe = Join-Path $candidate "node.exe"
+        if ((Get-NodeVersion -NodeExe $nodeExe) -eq $Version) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    $cacheRoot = Join-Path $artifactRoot "node-cache"
+    $archiveName = "node-$Version-win-x64.zip"
+    $archivePath = Join-Path $cacheRoot $archiveName
+    $baseUrl = "https://nodejs.org/dist/$Version"
+    New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+
+    if (-not (Test-Path -LiteralPath $archivePath)) {
+        Write-Host "Downloading build-time portable Node.js $Version..."
+        Invoke-WebRequest -Uri "$baseUrl/$archiveName" -OutFile $archivePath
+    }
+
+    $checksums = (Invoke-WebRequest -Uri "$baseUrl/SHASUMS256.txt" -UseBasicParsing).Content
+    $expectedLine = $checksums -split "`n" | Where-Object { $_ -match "\s$([regex]::Escape($archiveName))$" } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($expectedLine)) {
+        throw "Could not find an official checksum for $archiveName."
+    }
+
+    $expectedHash = ($expectedLine -split "\s+")[0].Trim()
+    $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $expectedHash.ToLowerInvariant()) {
+        Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+        throw "The build-time Node.js archive did not match Node.js's published SHA-256 checksum."
+    }
+
+    $expanded = Join-Path $cacheRoot "node-$Version-win-x64"
+    if (Test-Path -LiteralPath $expanded) {
+        Remove-Item -LiteralPath $expanded -Recurse -Force
+    }
+
+    Expand-Archive -LiteralPath $archivePath -DestinationPath $cacheRoot -Force
+    if ((Get-NodeVersion -NodeExe (Join-Path $expanded "node.exe")) -ne $Version) {
+        throw "The extracted Node.js runtime did not report the expected version $Version."
+    }
+
+    return $expanded
+}
+
+function Install-ProductionDependencies {
+    param(
+        [Parameter(Mandatory = $true)][string]$NodeExe,
+        [Parameter(Mandatory = $true)][string]$ProjectDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath (Join-Path $ProjectDirectory "package.json"))) {
+        return
+    }
+
+    $npmCli = Join-Path (Split-Path -Parent $NodeExe) "node_modules\npm\bin\npm-cli.js"
+    if (-not (Test-Path -LiteralPath $npmCli)) {
+        throw "The bundled Node.js runtime does not contain npm."
+    }
+
+    $originalPath = $env:Path
+    try {
+        # npm lifecycle scripts invoke `node` by name. Keep the bundled runtime first in PATH.
+        $env:Path = "$(Split-Path -Parent $NodeExe);$originalPath"
+        Push-Location $ProjectDirectory
+        & $NodeExe $npmCli ci --omit=dev --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm ci failed while preparing production dependencies for '$ProjectDirectory'."
+        }
+    }
+    finally {
+        Pop-Location -ErrorAction SilentlyContinue
+        $env:Path = $originalPath
+    }
+}
+
+function Assert-ReleaseRuntimeContents {
+    param([Parameter(Mandatory = $true)][string]$RuntimeDirectory)
+
+    $required = @(
+        "app\companion\Cursivis.Companion.exe",
+        "app\hotkey-host\Cursivis.HotkeyHost.exe",
+        "app\trigger-launcher\Cursivis.TriggerLauncher.exe",
+        "node\node.exe",
+        "backend\gemini-agent\src\server.js",
+        "backend\gemini-agent\node_modules",
+        "desktop\browser-action-agent\src\server.js",
+        "desktop\browser-action-agent\node_modules",
+        "desktop\browser-native-host\src\host.js"
+    )
+
+    $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $RuntimeDirectory $_)) })
+    if ($missing.Count -gt 0) {
+        throw "The self-contained runtime is incomplete. Missing: $($missing -join ', ')"
+    }
+
+    $forbidden = @(
+        Get-ChildItem -LiteralPath $RuntimeDirectory -File -Recurse |
+            Where-Object {
+                $_.Name -ieq "PluginApi.dll" -or
+                $_.Extension -ieq ".pdb" -or
+                $_.Name -ieq ".env" -or
+                $_.Name -match '^\.env\.'
+            }
+    )
+    if ($forbidden.Count -gt 0) {
+        throw "Refusing to package forbidden runtime files: $($forbidden.FullName -join ', ')"
+    }
+}
+
 Write-Host "Building Cursivis runtime package..."
 Write-Host "Output: $packageRoot"
 
@@ -126,6 +268,17 @@ Copy-CleanDirectory -Source $browserExtensionDir -Destination (Join-Path $runtim
 Copy-CleanDirectory -Source $extensionBridgeDir -Destination (Join-Path $runtimeRoot "desktop\browser-native-host")
 Copy-CleanDirectory -Source $sharedDir -Destination (Join-Path $runtimeRoot "shared")
 
+$nodeSource = Resolve-PortableNodeSource -Version $NodeVersion -PreferredDirectory $NodeSourceDirectory
+Copy-CleanDirectory -Source $nodeSource -Destination (Join-Path $runtimeRoot "node")
+$runtimeNode = Join-Path $runtimeRoot "node\node.exe"
+if ((Get-NodeVersion -NodeExe $runtimeNode) -ne $NodeVersion) {
+    throw "The packaged portable Node.js runtime did not report $NodeVersion."
+}
+
+Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Path $runtimeRoot "backend\gemini-agent")
+Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Path $runtimeRoot "desktop\browser-action-agent")
+Assert-ReleaseRuntimeContents -RuntimeDirectory $runtimeRoot
+
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.cmd") -Destination $packageRoot -Force
 
@@ -158,6 +311,8 @@ Cursivis Runtime Setup
 4. Paste your Gemini API keys in API LLM mode, or choose Local LLM and click Download & Use.
 5. Add Cursivis Live Mode to Actions Ring for permission-aware voice control.
 
+This self-contained runtime includes a private portable Node.js runtime and verified production dependencies.
+Setup never needs Node.js, npm, Visual Studio, or developer tools already installed on this PC.
 This runtime package does not include any private API keys or local model weights.
 Local LLM setup downloads models only after the user chooses that option.
 Live Mode uses the user's saved Gemini API key pool. Routine actions use Auto Execute by default; Require Confirmation remains available in Settings.
@@ -176,4 +331,4 @@ if (-not $SkipZip) {
 }
 
 Write-Host "Runtime package folder: $packageRoot"
-Write-Host "Node.js $NodeVersion will be downloaded by the installer only if portable Node is not already installed in the Cursivis runtime folder."
+Write-Host "The runtime includes portable Node.js $NodeVersion and production dependencies. Customer setup will not run npm."

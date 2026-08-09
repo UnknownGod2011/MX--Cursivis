@@ -57,32 +57,62 @@ namespace Loupedeck.CursivisPlugin
 
         private async Task RunAsync(CancellationToken cancellationToken)
         {
+            var retryDelay = TimeSpan.FromSeconds(3);
+            var missingCompanionLogged = false;
+            var unavailableLogged = false;
             while (!cancellationToken.IsCancellationRequested)
             {
+                if (!CompanionRuntimeState.GetSnapshot().IsInstalled)
+                {
+                    if (!missingCompanionLogged)
+                    {
+                        PluginLog.Info("Cursivis Companion is not installed; haptic events will stay paused until setup completes.");
+                        missingCompanionLogged = true;
+                    }
+
+                    await DelayAsync(TimeSpan.FromSeconds(60), cancellationToken);
+                    continue;
+                }
+
+                missingCompanionLogged = false;
                 try
                 {
                     using var socket = new ClientWebSocket();
-                    await socket.ConnectAsync(HapticUri, cancellationToken);
+                    using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    connectCts.CancelAfter(TimeSpan.FromSeconds(2));
+                    await socket.ConnectAsync(HapticUri, connectCts.Token);
                     PluginLog.Info("Connected to companion haptic channel.");
+                    unavailableLogged = false;
+                    retryDelay = TimeSpan.FromSeconds(3);
                     await this.ReceiveLoopAsync(socket, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
                     break;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    PluginLog.Verbose(ex, "Companion haptic channel unavailable; will retry.");
+                    if (!unavailableLogged)
+                    {
+                        PluginLog.Info("Companion haptic channel is unavailable; retrying quietly while Cursivis starts.");
+                        unavailableLogged = true;
+                    }
                 }
 
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                await DelayAsync(retryDelay, cancellationToken);
+                retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 2, 60));
+            }
+        }
+
+        private static async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutdown is expected while Logi Plugin Service unloads the plugin.
             }
         }
 

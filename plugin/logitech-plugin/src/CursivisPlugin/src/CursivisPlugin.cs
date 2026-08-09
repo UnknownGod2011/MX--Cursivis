@@ -10,10 +10,10 @@ namespace Loupedeck.CursivisPlugin
         private CompanionHapticClient _companionHapticClient;
 
         // Gets a value indicating whether this is an API-only plugin.
-        public override Boolean UsesApplicationApiOnly => true;
+        public override Boolean UsesApplicationApiOnly => false;
 
         // Gets a value indicating whether this is a Universal plugin or an Application plugin.
-        public override Boolean HasNoApplication => true;
+        public override Boolean HasNoApplication => false;
 
         // Initializes a new instance of the plugin class.
         public CursivisPlugin()
@@ -36,11 +36,13 @@ namespace Loupedeck.CursivisPlugin
 
             // Dynamic actions are discovered by the current Logi Actions SDK template,
             // so there is no explicit registration call needed here.
+            CompanionActionAvailabilityMonitor.Start();
             this._companionHapticClient.Start();
         }
 
         public override void Unload()
         {
+            CompanionActionAvailabilityMonitor.Stop();
             this._companionHapticClient.Dispose();
             this._companionHapticClient = new CompanionHapticClient(this);
         }
