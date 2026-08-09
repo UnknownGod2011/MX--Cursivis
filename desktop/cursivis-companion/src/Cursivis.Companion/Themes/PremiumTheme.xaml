@@ -411,6 +411,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
                     <Border x:Name="Root"
+                            Margin="0,0,1,0"
                             Padding="{TemplateBinding Padding}"
                             Background="{DynamicResource Brush.ButtonSecondaryBackground}"
                             BorderBrush="{DynamicResource Brush.StrokeStrong}"

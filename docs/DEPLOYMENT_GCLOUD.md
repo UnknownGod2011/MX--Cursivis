@@ -49,7 +49,7 @@ gcloud run deploy cursivis-gemini-agent `
   --region us-central1 `
   --platform managed `
   --allow-unauthenticated `
-  --set-env-vars GOOGLE_API_KEY=YOUR_KEY,CURSIVIS_ENABLE_LIVE_GROUNDING=true,GEMINI_MODEL=gemini-2.5-flash
+  --set-env-vars GOOGLE_API_KEY=YOUR_KEY,CURSIVIS_ENABLE_LIVE_GROUNDING=true,GEMINI_MODEL=gemini-3.6-flash
 ```
 
 ## Health Check

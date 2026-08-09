@@ -16,9 +16,8 @@ public sealed class GeminiScreenGuidanceService : IDisposable
 {
     private static readonly string[] ModelCandidates =
     [
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
     ];
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(35) };
@@ -128,7 +127,6 @@ public sealed class GeminiScreenGuidanceService : IDisposable
             },
             generationConfig = new
             {
-                temperature = 0.15,
                 maxOutputTokens = 900,
             },
         };

@@ -119,7 +119,7 @@ if ($UseSecretManager) {
 }
 elseif (-not [string]::IsNullOrWhiteSpace($GoogleApiKey)) {
     $deployArgs += "--set-env-vars"
-    $deployArgs += "GOOGLE_API_KEY=$GoogleApiKey,CURSIVIS_ENABLE_LIVE_GROUNDING=true,GEMINI_MODEL=gemini-2.5-flash"
+    $deployArgs += "GOOGLE_API_KEY=$GoogleApiKey,CURSIVIS_ENABLE_LIVE_GROUNDING=true,GEMINI_MODEL=gemini-3.6-flash"
 }
 else {
     throw "Provide either -GoogleApiKey or use -UseSecretManager with -GoogleApiKey."

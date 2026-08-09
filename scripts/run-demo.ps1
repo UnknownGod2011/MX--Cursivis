@@ -131,9 +131,10 @@ $apiKeysEscaped = $effectiveApiKeysJoined.Replace("'", "''")
 $backendCmdParts = @(
     "`$env:GOOGLE_API_KEY='$apiKeyEscaped'",
     "`$env:GOOGLE_API_KEYS='$apiKeysEscaped'",
-    "`$env:GEMINI_ROUTER_MODEL='gemini-2.5-flash-lite'",
-    "`$env:GEMINI_OPTIONS_MODEL='gemini-2.5-flash-lite'",
-    "`$env:GEMINI_FALLBACK_MODELS='gemini-2.5-flash-lite,gemini-2.0-flash'",
+    "`$env:GEMINI_MODEL='gemini-3.6-flash'",
+    "`$env:GEMINI_ROUTER_MODEL='gemini-3.5-flash-lite'",
+    "`$env:GEMINI_OPTIONS_MODEL='gemini-3.5-flash-lite'",
+    "`$env:GEMINI_FALLBACK_MODELS='gemini-3.5-flash,gemini-3.5-flash-lite'",
     "Set-Location -LiteralPath '$backendDir'"
 )
 

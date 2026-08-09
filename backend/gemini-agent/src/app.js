@@ -1341,7 +1341,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
         modelOverride:
           process.env.GEMINI_TRANSCRIBE_MODEL ||
           process.env.GEMINI_MODEL ||
-          "gemini-2.5-flash",
+          "gemini-3.6-flash",
         contents: [
           {
             role: "user",

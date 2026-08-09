@@ -4,9 +4,9 @@ Use this checklist immediately before uploading Cursivis to Logitech Marketplace
 
 ## Final Artifacts
 
-- `artifacts/logitech-marketplace/Cursivis_1_5_0.lplug4`
-- `artifacts/cursivis-runtime/CursivisRuntime_1_5_0.zip`
-- `artifacts/qa-candidate/CursivisCompanionSetup_1_5_0.exe`
+- `artifacts/logitech-marketplace/Cursivis_1_5_2.lplug4`
+- `artifacts/cursivis-runtime/CursivisRuntime_1_5_2.zip`
+- `artifacts/qa-candidate/CursivisCompanionSetup_1_5_2.exe`
 
 ## Verified Locally
 
@@ -15,7 +15,7 @@ Use this checklist immediately before uploading Cursivis to Logitech Marketplace
 - Runtime zip rebuilt after final Companion/settings changes.
 - Fresh runtime installer smoke test passed.
 - Runtime installer registers Companion startup and the hidden Cursivis hotkey host startup.
-- Setup executable downloads the matching runtime ZIP from Vercel Blob and verifies its pinned SHA-256 before extraction.
+- Setup executable downloads the matching runtime ZIP from the versioned GitHub Release and verifies its pinned SHA-256 before extraction.
 - Runtime package contains the Chromium extension files; current-tab automation is documented as an optional browser approval step.
 - Cursivis Live Mode starts and stops from the plugin action without a second process or startup entry.
 - Live Mode uses the existing DPAPI-protected Gemini API-key pool.
@@ -30,8 +30,8 @@ Use this checklist immediately before uploading Cursivis to Logitech Marketplace
 ## Marketplace Form Inputs
 
 - Product name: Cursivis
-- Version: 1.5.0
-- Plugin package: `Cursivis_1_5_0.lplug4`
+- Version: 1.5.2
+- Plugin package: `Cursivis_1_5_2.lplug4`
 - Companion setup URL: `https://mxcursivis.vercel.app/`
 - Homepage URL: `https://mxcursivis.vercel.app/`
 - Support URL: `https://github.com/UnknownGod2011/MX--Cursivis/issues`

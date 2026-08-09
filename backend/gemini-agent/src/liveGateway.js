@@ -7,7 +7,7 @@ import {
   withGoogleGenAiClient
 } from "./apiKeyPool.js";
 
-const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-live-2.5-flash-preview";
+const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview";
 const LIVE_PATH = process.env.CURSIVIS_LIVE_VOICE_PATH || "/live";
 
 export function attachLiveGateway(server) {
@@ -33,7 +33,7 @@ export function attachLiveGateway(server) {
           session: await client.live.connect({
             model: LIVE_MODEL,
             config: {
-              responseModalities: ["TEXT"],
+              responseModalities: ["AUDIO"],
               inputAudioTranscription: {},
               outputAudioTranscription: {},
               systemInstruction: "Silently capture the user's spoken command. When the turn is complete, return only the cleaned command text."

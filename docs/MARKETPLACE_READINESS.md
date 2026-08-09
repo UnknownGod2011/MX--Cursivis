@@ -137,15 +137,15 @@ Local runtime/model sources:
 
 The Logitech plugin package alone is not enough for a true first-run Cursivis experience because the Companion app, backend service, browser action agent, and secure runtime profile must exist on the user's PC. The current release artifacts now include a separate Windows runtime setup package:
 
-- `artifacts/cursivis-runtime/CursivisRuntime_1_5_0.zip`
+- `artifacts/cursivis-runtime/CursivisRuntime_1_5_2.zip`
 - `scripts/install-cursivis-runtime.ps1`
 - `scripts/install-cursivis-runtime.cmd`
 
 The installer:
 
 - Copies the Companion, hotkey host, trigger launcher, backend, browser action agent, and browser bridge files.
-- Downloads portable Node.js only if it is not already present in the Cursivis runtime folder.
-- Runs production dependency installation for the backend and browser action agent.
+- Installs the packaged portable Node.js runtime without using any globally installed Node.js or npm.
+- Installs prebuilt production dependencies for the backend and browser action agent without running npm on the customer's PC.
 - Writes a blank runtime profile with API LLM as the default backend, no bundled private keys, and `granite3.2-vision:2b` as the default local model.
 - Registers Cursivis Companion at Windows startup unless disabled.
 - Registers the hidden Cursivis hotkey host at Windows startup so the MX gesture-button shortcut can wake the Companion after restart.
@@ -160,7 +160,7 @@ Current runtime installer verification:
 - Production npm install reported `0` vulnerabilities for both Node services.
 - The runtime zip does not include a private runtime profile, private API keys, or local model weights.
 - Live Mode reads the existing DPAPI-protected Gemini API-key pool. Clean installs default to Auto Execute for routine actions; users can switch to Require Confirmation, and privacy-sensitive or irreversible actions still require approval.
-- The public setup executable downloads the versioned runtime from Vercel Blob and verifies its pinned SHA-256 before extraction.
+- The public setup executable downloads the versioned runtime from GitHub Releases and verifies its pinned SHA-256 before extraction.
 
 ## MX Gesture Button Shortcut
 
@@ -186,9 +186,9 @@ The Companion Settings UI now includes "Assign Cursivis Go Trigger to a Shortcut
 
 Current package target:
 
-- Rebuild `plugin/logitech-plugin/dist/Cursivis.lplug4` and `artifacts/logitech-marketplace/Cursivis_1_5_0.lplug4` after final Live Mode regression testing.
+- Rebuild `plugin/logitech-plugin/dist/Cursivis.lplug4` and `artifacts/logitech-marketplace/Cursivis_1_5_2.lplug4` after final Live Mode regression testing.
 - The existing package contains `metadata/LoupedeckPackage.yaml`, `metadata/Icon256x256.png`, and `bin/CursivisPlugin.dll`.
 - The `.lplug4` package is only the Logitech plugin package; it does not bundle Ollama/Gemma model weights. Local model setup remains a guided Companion flow.
-- The matching Windows runtime package target is `artifacts/cursivis-runtime/CursivisRuntime_1_5_0.zip`.
-- The runtime package is hosted at a versioned Vercel Blob URL and is consumed only through the SHA-256-pinned setup executable.
+- The matching Windows runtime package target is `artifacts/cursivis-runtime/CursivisRuntime_1_5_2.zip`.
+- The runtime package is hosted at a versioned GitHub Releases URL and is consumed only through the SHA-256-pinned setup executable.
 - See `docs/LIVE_MODE_MARKETPLACE_REVIEW.md` for the Live Mode permission, privacy, and reviewer test flow.

@@ -17,7 +17,8 @@ import {
 } from "./apiKeyPool.js";
 import { getGeminiErrorDiagnostics, traceGeminiEvent } from "./geminiDiagnostics.js";
 
-const DEFAULT_FALLBACK_MODELS = ["gemini-2.5-flash-lite"];
+const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+const DEFAULT_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"];
 const RETIRED_FALLBACK_MODELS = new Set(["gemini-2.0-flash"]);
 const DEFAULT_CACHE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_CACHE_LIMIT = 200;
@@ -97,7 +98,7 @@ const DYNAMIC_OPTIONS_SCHEMA = {
 };
 
 export function createGeminiTextGenerator({
-  model = process.env.GEMINI_MODEL || "gemini-2.5-flash"
+  model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
 } = {}) {
   const cache = new Map();
 
@@ -505,7 +506,7 @@ export function fallbackIntentDecision({ selectionKind, text }) {
 }
 
 export function createGeminiIntentRouter({
-  model = process.env.GEMINI_ROUTER_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash"
+  model = process.env.GEMINI_ROUTER_MODEL || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
 } = {}) {
   const cache = new Map();
 
@@ -630,7 +631,7 @@ export function createGeminiIntentRouter({
 }
 
 export function createGeminiOptionGenerator({
-  model = process.env.GEMINI_OPTIONS_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash"
+  model = process.env.GEMINI_OPTIONS_MODEL || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
 } = {}) {
   const cache = new Map();
 
@@ -809,14 +810,15 @@ export async function generateWithFallbackModels(
         const abortSignal = request.config?.abortSignal
           ? AbortSignal.any([request.config.abortSignal, budgetSignal])
           : budgetSignal;
+        const compatibleConfig = buildModelCompatibleConfig(request.config, candidateModel);
         const response = await client.models.generateContent({
           ...request,
           model: candidateModel,
           config: {
-            ...(request.config || {}),
+            ...compatibleConfig,
             abortSignal,
             httpOptions: {
-              ...(request.config?.httpOptions || {}),
+              ...(compatibleConfig.httpOptions || {}),
               timeout: Math.max(10_000, attemptTimeoutMs),
               retryOptions: {
                 ...(request.config?.httpOptions?.retryOptions || {}),
@@ -875,6 +877,19 @@ export async function generateWithFallbackModels(
   }
 
   throw lastError ?? new Error("Gemini request failed.");
+}
+
+function buildModelCompatibleConfig(config = {}, model = "") {
+  const compatible = { ...config };
+  delete compatible.numPredict;
+
+  if (/^gemini-(?:3\.6-flash|3\.5-flash-lite)(?:$|-)/i.test(model)) {
+    delete compatible.temperature;
+    delete compatible.topP;
+    delete compatible.topK;
+  }
+
+  return compatible;
 }
 
 function createRetryContext({ budgetMs = resolveOperationBudgetMs() } = {}) {

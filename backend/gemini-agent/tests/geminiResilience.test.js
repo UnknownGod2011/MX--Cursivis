@@ -91,6 +91,31 @@ test("uses client cancellation for recovery budgets below Google's minimum HTTP 
   assert.ok(capturedRequest.config.abortSignal instanceof AbortSignal);
 });
 
+test("removes deprecated sampling fields for current stable Gemini models", async () => {
+  let capturedRequest = null;
+  const client = createClient(async (request) => {
+    capturedRequest = request;
+    return { text: "compatible response" };
+  });
+
+  await generateWithFallbackModels(
+    client,
+    {
+      model: "gemini-3.6-flash",
+      contents: "hello",
+      config: { temperature: 0.2, topP: 0.8, topK: 20, numPredict: 24 }
+    },
+    ["gemini-3.6-flash"],
+    false,
+    retryOptions([])
+  );
+
+  assert.equal(capturedRequest.config.temperature, undefined);
+  assert.equal(capturedRequest.config.topP, undefined);
+  assert.equal(capturedRequest.config.topK, undefined);
+  assert.equal(capturedRequest.config.numPredict, undefined);
+});
+
 test("keeps the current model when a same-model retry succeeds", async () => {
   let calls = 0;
   const client = createClient(async () => {

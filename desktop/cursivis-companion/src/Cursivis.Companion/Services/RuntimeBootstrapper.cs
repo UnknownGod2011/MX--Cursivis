@@ -63,9 +63,10 @@ public sealed class RuntimeBootstrapper
         {
             ["PORT"] = ResolvePort(profile.BackendUrl).ToString(),
             ["CURSIVIS_AI_PROVIDER"] = NormalizeProviderId(profile.AiProvider),
-            ["GEMINI_ROUTER_MODEL"] = "gemini-2.5-flash-lite",
-            ["GEMINI_OPTIONS_MODEL"] = "gemini-2.5-flash-lite",
-            ["GEMINI_FALLBACK_MODELS"] = "gemini-2.5-flash-lite,gemini-2.0-flash"
+            ["GEMINI_MODEL"] = "gemini-3.6-flash",
+            ["GEMINI_ROUTER_MODEL"] = "gemini-3.5-flash-lite",
+            ["GEMINI_OPTIONS_MODEL"] = "gemini-3.5-flash-lite",
+            ["GEMINI_FALLBACK_MODELS"] = "gemini-3.5-flash,gemini-3.5-flash-lite"
         };
         AddProviderEnvironment(environment, profile);
 

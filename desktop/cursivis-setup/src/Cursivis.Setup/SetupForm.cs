@@ -202,6 +202,13 @@ public sealed class SetupForm : Form
             installationFinished = true;
             closeButton.Text = "Close";
             closeButton.Enabled = true;
+            if (!IsDisposed && IsHandleCreated)
+            {
+                WindowState = FormWindowState.Normal;
+                Show();
+                Activate();
+                BringToFront();
+            }
         }
     }
 
@@ -221,8 +228,12 @@ public sealed class SetupForm : Form
         var runtimeCommitted = false;
         var previousRuntimeExisted = false;
 
-        RecoverInterruptedUpdate(installRoot, legacyStagingRoot, legacyBackupRoot);
-        Directory.CreateDirectory(tempRoot);
+        SetStatus("Preparing setup", "Checking the existing installation and preparing a safe update.");
+        await Task.Run(() =>
+        {
+            RecoverInterruptedUpdate(installRoot, legacyStagingRoot, legacyBackupRoot);
+            Directory.CreateDirectory(tempRoot);
+        }, token);
 
         try
         {
@@ -230,32 +241,41 @@ public sealed class SetupForm : Form
             await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
 
             SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
-            DeleteDirectoryOrThrow(extractRoot, "temporary extraction files");
-            ZipFile.ExtractToDirectory(zipPath, extractRoot);
-
             var packageRoot = Path.Combine(extractRoot, $"CursivisRuntime_{PackageVersion}");
             var payloadRoot = Path.Combine(packageRoot, "runtime");
-            if (!Directory.Exists(payloadRoot))
+            await Task.Run(() =>
             {
-                throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
-            }
-            ValidateRuntimePayload(payloadRoot);
+                DeleteDirectoryOrThrow(extractRoot, "temporary extraction files");
+                ZipFile.ExtractToDirectory(zipPath, extractRoot);
+                if (!Directory.Exists(payloadRoot))
+                {
+                    throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
+                }
+
+                ValidateRuntimePayload(payloadRoot);
+            }, token);
 
             SetStatus("Step 3 of 5: Staging runtime files", "Preparing the update without changing your working installation.");
-            CopyDirectory(payloadRoot, stagingRoot);
-            ValidateRuntimePayload(stagingRoot);
+            await Task.Run(() =>
+            {
+                CopyDirectory(payloadRoot, stagingRoot);
+                ValidateRuntimePayload(stagingRoot);
+            }, token);
 
             SetStatus("Step 4 of 5: Verifying runtime", "Checking the bundled backend and Live Mode dependencies.");
-            ValidateRuntimePayload(stagingRoot);
+            await Task.Run(() => ValidateRuntimePayload(stagingRoot), token);
 
             SetStatus("Step 5 of 5: Activating update", "Stopping the old runtime briefly and switching to the verified files.");
-            StopInstalledRuntimeProcesses(installRoot);
-            StopCursivisPortListeners(installRoot);
-            PreserveMutableRuntimeData(installRoot, stagingRoot);
-            previousRuntimeExisted = HasValidRuntimePayload(installRoot);
             try
             {
-                CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
+                await Task.Run(() =>
+                {
+                    StopInstalledRuntimeProcesses(installRoot);
+                    StopCursivisPortListeners(installRoot);
+                    PreserveMutableRuntimeData(installRoot, stagingRoot);
+                    previousRuntimeExisted = HasValidRuntimePayload(installRoot);
+                    CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
+                }, token);
                 runtimeCommitted = true;
             }
             catch (Exception commitError)
@@ -294,7 +314,8 @@ public sealed class SetupForm : Form
                 SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
                 await WaitForRuntimeServicesAsync(token);
                 Log("Companion backend and browser services are ready.");
-                if (!TryDeleteDirectory(backupRoot))
+                var backupRemoved = await Task.Run(() => TryDeleteDirectory(backupRoot), CancellationToken.None);
+                if (!backupRemoved)
                 {
                     Log("The previous runtime backup is still in use and will be cleaned up during a later update.");
                 }
@@ -302,9 +323,12 @@ public sealed class SetupForm : Form
             catch (Exception activationError)
             {
                 Log("Activation failed. Restoring the previous runtime.");
-                StopInstalledRuntimeProcesses(installRoot);
-                StopCursivisPortListeners(installRoot);
-                RollbackRuntime(installRoot, backupRoot);
+                await Task.Run(() =>
+                {
+                    StopInstalledRuntimeProcesses(installRoot);
+                    StopCursivisPortListeners(installRoot);
+                    RollbackRuntime(installRoot, backupRoot);
+                }, CancellationToken.None);
                 runtimeCommitted = false;
 
                 if (previousRuntimeExisted && HasValidRuntimePayload(installRoot))
@@ -322,12 +346,16 @@ public sealed class SetupForm : Form
         }
         finally
         {
-            _ = TryDeleteDirectory(stagingRoot);
-            if (!runtimeCommitted)
+            await Task.Run(() =>
             {
-                _ = TryDeleteDirectory(backupRoot);
-            }
-            _ = TryDeleteDirectory(tempRoot);
+                _ = TryDeleteDirectory(stagingRoot);
+                if (!runtimeCommitted)
+                {
+                    _ = TryDeleteDirectory(backupRoot);
+                }
+
+                _ = TryDeleteDirectory(tempRoot);
+            }, CancellationToken.None);
         }
     }
 
