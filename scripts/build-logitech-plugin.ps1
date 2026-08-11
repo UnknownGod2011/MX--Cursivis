@@ -77,6 +77,29 @@ function Assert-ForbiddenFilesAbsentFromPackage {
     }
 }
 
+function Assert-InternalActionsAbsentFromPackage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Package
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Package))
+    try {
+        $matches = @($archive.Entries | Where-Object {
+            $_.FullName -match 'CursivisDialAdjustment|CursivisLongPressStartCommand|CursivisLongPressEndCommand'
+        })
+
+        if ($matches.Count -gt 0) {
+            $entries = $matches.FullName -join [Environment]::NewLine
+            throw "Internal Logitech actions must not be user-selectable. Found:$([Environment]::NewLine)$entries"
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 Write-Host "Preparing Logitech plugin build..."
 Write-Host "Plugin project: $pluginProject"
 
@@ -133,10 +156,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Assert-ForbiddenFilesAbsentFromPackage -Package $packOutput
+Assert-InternalActionsAbsentFromPackage -Package $packOutput
 Write-Host "Confirmed: PluginApi.dll and debug symbols are absent from the final package."
 
 Copy-Item -LiteralPath $packOutput -Destination $artifactPath -Force
 Assert-ForbiddenFilesAbsentFromPackage -Package $artifactPath
+Assert-InternalActionsAbsentFromPackage -Package $artifactPath
 Write-Host "Versioned marketplace artifact: $artifactPath"
 
 if ($InstallPackage) {

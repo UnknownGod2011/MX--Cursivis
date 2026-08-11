@@ -83,20 +83,55 @@ namespace Loupedeck.CursivisPlugin
             }
         }
 
-        public static void OpenDownloadPage()
+        public static Boolean OpenDownloadPage()
         {
             try
             {
-                Process.Start(new ProcessStartInfo
+                if (OperatingSystem.IsWindows())
+                {
+                    var explorerPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                        "explorer.exe");
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = explorerPath,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    startInfo.ArgumentList.Add(DownloadUrl);
+
+                    using var explorerProcess = Process.Start(startInfo);
+                    if (explorerProcess is not null)
+                    {
+                        PluginLog.Info("Opened the Cursivis Companion download page.");
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "Windows Explorer could not open the Companion download page; trying the registered browser.");
+            }
+
+            try
+            {
+                using var browserProcess = Process.Start(new ProcessStartInfo
                 {
                     FileName = DownloadUrl,
                     UseShellExecute = true,
                 });
+                if (browserProcess is not null)
+                {
+                    PluginLog.Info("Opened the Cursivis Companion download page with the registered browser.");
+                    return true;
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // The action still reports the recovery URL through the plugin log.
+                PluginLog.Error(ex, $"Could not open the Companion download page. Setup: {DownloadUrl}");
             }
+
+            return false;
         }
 
         public static void Invalidate()

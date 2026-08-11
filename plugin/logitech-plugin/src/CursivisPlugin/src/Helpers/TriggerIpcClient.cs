@@ -45,9 +45,16 @@ namespace Loupedeck.CursivisPlugin
             var snapshot = CompanionRuntimeState.GetSnapshot(refresh: true);
             if (!snapshot.IsInstalled)
             {
-                CompanionRuntimeState.OpenDownloadPage();
+                if (OperatingSystem.IsWindowsVersionAtLeast(6, 1))
+                {
+                    CompanionRecoveryPrompt.Show();
+                }
+                else
+                {
+                    CompanionRuntimeState.OpenDownloadPage();
+                }
                 throw new InvalidOperationException(
-                    "Cursivis Companion is not installed. The official setup page has opened in your browser.");
+                    "Cursivis Companion is not installed. Use Get Companion to install it, then press this action again.");
             }
 
             CompanionRuntimeState.TryStartCompanion();

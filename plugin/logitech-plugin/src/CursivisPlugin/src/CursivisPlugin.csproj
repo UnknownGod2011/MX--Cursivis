@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <!-- Match the supported Logi Plugin Service runtime that supplies PluginApi.dll. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <RootNamespace>Loupedeck.CursivisPlugin</RootNamespace>
@@ -33,6 +34,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Dial transport remains supported by Companion, but the implementation-only
+         adjustment is not exposed in the Options+/Actions Ring picker. -->
+    <Compile Remove="Actions\CursivisDialAdjustment.cs" />
+
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
       <Private>false</Private>
@@ -57,6 +62,7 @@
     <Message Text="📦 Copying package files..." Importance="High" />
     <ItemGroup>
       <PackageFiles Include="package\**\*" />
+      <PackageFiles Remove="package\icontemplates\Loupedeck.CursivisPlugin.CursivisDialAdjustment.ict" />
     </ItemGroup>
     <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(OutputPath)..\%(RecursiveDir)" />
     <Message Text="✅ Package files copied to $(OutputPath)..\" Importance="High" />

@@ -410,27 +410,31 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
-                    <Border x:Name="Root"
-                            Margin="0,0,1,0"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{DynamicResource Brush.ButtonSecondaryBackground}"
-                            BorderBrush="{DynamicResource Brush.StrokeStrong}"
-                            BorderThickness="1"
-                            CornerRadius="13"
-                            SnapsToDevicePixels="True">
+                    <Grid Margin="0,0,1,0">
+                        <Border x:Name="Root"
+                                Background="{DynamicResource Brush.ButtonSecondaryBackground}"
+                                CornerRadius="13" />
+                        <Rectangle x:Name="Outline"
+                                   Margin="0.5"
+                                   RadiusX="13"
+                                   RadiusY="13"
+                                   Stroke="{DynamicResource Brush.StrokeStrong}"
+                                   StrokeThickness="1"
+                                   IsHitTestVisible="False" />
                         <ContentPresenter ContentSource="Header"
+                                          Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           TextElement.Foreground="{TemplateBinding Foreground}" />
-                    </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceHigh}" />
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.StrokeStrong}" />
+                            <Setter TargetName="Outline" Property="Stroke" Value="{DynamicResource Brush.StrokeStrong}" />
                             <Setter Property="Foreground" Value="{DynamicResource Brush.TextMain}" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.StrokeStrong}" />
+                            <Setter TargetName="Outline" Property="Stroke" Value="{DynamicResource Brush.StrokeStrong}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

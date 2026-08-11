@@ -69,8 +69,6 @@ namespace Loupedeck.CursivisPlugin
 
     public abstract class CompanionAwareCommand : PluginDynamicCommand, ICompanionAwareAction
     {
-        private readonly Boolean _isRecoveryAction;
-
         protected CompanionAwareCommand(
             String displayName,
             String description,
@@ -79,13 +77,16 @@ namespace Loupedeck.CursivisPlugin
             Boolean isRecoveryAction = false)
             : base(displayName, description, groupName, supportedDevices)
         {
-            this._isRecoveryAction = isRecoveryAction;
+            _ = isRecoveryAction;
             CompanionActionAvailabilityMonitor.Register(this);
         }
 
         public void RefreshCompanionAvailability(Boolean companionAvailable)
         {
-            this.IsEnabled = this._isRecoveryAction || companionAvailable;
+            // Commands remain pressable so an already-assigned action can guide a
+            // first-time user to Companion Setup. TriggerIpcClient still wakes an
+            // installed Companion and bounds connection retries.
+            this.IsEnabled = true;
         }
     }
 
