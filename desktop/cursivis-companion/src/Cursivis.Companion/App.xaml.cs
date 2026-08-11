@@ -57,6 +57,7 @@ public partial class App : Application
 
         try
         {
+            LiveModeLog.Info("boundary=startup.begin");
             _settingsService = new SettingsService();
             var savedSettings = await _settingsService.TryLoadSettingsAsync()
                 ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark, TalkTriggerInputMode.Voice, PlayHapticSound: false, GoTriggerShortcut: SettingsService.DefaultGoTriggerShortcut);
@@ -89,7 +90,9 @@ public partial class App : Application
 
             var backgroundLaunch = e.Args.Any(arg => string.Equals(arg, "--background", StringComparison.OrdinalIgnoreCase));
             var runtimeBootstrapper = new RuntimeBootstrapper();
+            LiveModeLog.Info("boundary=startup.runtime_bootstrap.begin");
             await runtimeBootstrapper.EnsureRuntimeReadyAsync(CancellationToken.None);
+            LiveModeLog.Info("boundary=startup.runtime_bootstrap.end");
 
             var clipboardService = new ClipboardService();
             var intentMemoryService = new Services.IntentMemoryService();
@@ -183,9 +186,11 @@ public partial class App : Application
             }
 
             InitializeTrayIcon();
+            LiveModeLog.Info("boundary=startup.ready");
         }
         catch (Exception ex)
         {
+            LiveModeLog.Error(ex, "Companion startup failed");
             MessageBox.Show(
                 $"Companion startup failed:\n{ex.Message}",
                 "Cursivis",
@@ -431,8 +436,9 @@ public partial class App : Application
                 }
             });
         }
-        catch
+        catch (Exception ex)
         {
+            LiveModeLog.Warning(ex, "Companion trigger handling failed");
             // Keep app running even if an external IPC event is malformed.
         }
     }

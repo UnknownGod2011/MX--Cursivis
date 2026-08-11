@@ -191,6 +191,23 @@ function Install-ProductionDependencies {
     }
 }
 
+function Remove-BuildTimeNodeTooling {
+    param([Parameter(Mandatory = $true)][string]$NodeDirectory)
+
+    foreach ($name in @(
+        "node_modules",
+        "corepack", "corepack.cmd",
+        "npm", "npm.cmd", "npm.ps1",
+        "npx", "npx.cmd", "npx.ps1",
+        "install_tools.bat", "nodevars.bat"
+    )) {
+        $path = Join-Path $NodeDirectory $name
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+        }
+    }
+}
+
 function Assert-ReleaseRuntimeContents {
     param([Parameter(Mandatory = $true)][string]$RuntimeDirectory)
 
@@ -277,6 +294,7 @@ if ((Get-NodeVersion -NodeExe $runtimeNode) -ne $NodeVersion) {
 
 Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Path $runtimeRoot "backend\gemini-agent")
 Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Path $runtimeRoot "desktop\browser-action-agent")
+Remove-BuildTimeNodeTooling -NodeDirectory (Split-Path -Parent $runtimeNode)
 Assert-ReleaseRuntimeContents -RuntimeDirectory $runtimeRoot
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force

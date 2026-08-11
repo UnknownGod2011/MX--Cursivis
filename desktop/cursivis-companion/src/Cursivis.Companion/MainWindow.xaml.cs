@@ -52,6 +52,9 @@ public partial class MainWindow : Window
     private bool _isLiveModeUiInitialized;
     private bool _isUpdatingThemeSelection;
     private bool _isUpdatingApiKey;
+    private bool _isLoadingApiKeyPool;
+    private string _lastSavedApiKeyPool = string.Empty;
+    private CancellationTokenSource? _apiKeyAutoSaveCts;
     private bool _isUpdatingAiBackend;
     private CancellationTokenSource? _localModelDownloadCts;
     private bool _allowWindowClose;
@@ -597,6 +600,9 @@ public partial class MainWindow : Window
         _triggerController.OnProcessingComplete -= TriggerControllerOnProcessingComplete;
         _triggerController.OnModeChanged -= TriggerControllerOnModeChanged;
         CompanionThemeService.ThemeChanged -= CompanionThemeServiceOnThemeChanged;
+        _apiKeyAutoSaveCts?.Cancel();
+        _apiKeyAutoSaveCts?.Dispose();
+        _apiKeyAutoSaveCts = null;
         ApiKeyTextBox.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(ApiKeyTextBox_OnScrollChanged));
         DataObject.RemovePastingHandler(ApiKeyTextBox, ApiKeyTextBox_OnPaste);
         _runtimeGeminiClient.Dispose();
@@ -708,33 +714,17 @@ public partial class MainWindow : Window
         DiagnosticsRepairRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private async void SetApiKeyButton_OnClick(object sender, RoutedEventArgs e)
+    private void AddApiKeyButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (_isUpdatingApiKey)
+        if (!string.IsNullOrEmpty(ApiKeyTextBox.Text) &&
+            !ApiKeyTextBox.Text.EndsWith(Environment.NewLine, StringComparison.Ordinal))
         {
-            return;
+            ApiKeyTextBox.AppendText(Environment.NewLine);
         }
 
-        _isUpdatingApiKey = true;
-        SetApiKeyButton.IsEnabled = false;
-        var originalContent = SetApiKeyButton.Content;
-        SetApiKeyButton.Content = "Saving...";
-
-        try
-        {
-            await SaveApiKeyPoolFromUiAsync(requireKey: true, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Status: Failed to update API key pool. {ex.Message}";
-            AiBackendStatusText.Text = $"AI backend: API key pool save failed. {ex.Message}";
-        }
-        finally
-        {
-            _isUpdatingApiKey = false;
-            SetApiKeyButton.IsEnabled = true;
-            SetApiKeyButton.Content = originalContent;
-        }
+        ApiKeyTextBox.CaretIndex = ApiKeyTextBox.Text.Length;
+        ApiKeyTextBox.Focus();
+        ApiKeyTextBox.ScrollToEnd();
     }
 
     private async void UseApiBackendButton_OnClick(object sender, RoutedEventArgs e)
@@ -757,7 +747,11 @@ public partial class MainWindow : Window
         {
             try
             {
-                await SaveApiKeyPoolFromUiAsync(requireKey: false, CancellationToken.None);
+                var saved = await SaveApiKeyPoolFromUiAsync(requireKey: false, CancellationToken.None);
+                if (!saved && !string.IsNullOrWhiteSpace(ApiKeyTextBox.Text))
+                {
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -855,7 +849,11 @@ public partial class MainWindow : Window
         {
             try
             {
-                await SaveApiKeyPoolFromUiAsync(requireKey: false, CancellationToken.None);
+                var saved = await SaveApiKeyPoolFromUiAsync(requireKey: false, CancellationToken.None);
+                if (!saved && !string.IsNullOrWhiteSpace(ApiKeyTextBox.Text))
+                {
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -974,30 +972,106 @@ public partial class MainWindow : Window
 
     private async Task<bool> SaveApiKeyPoolFromUiAsync(bool requireKey, CancellationToken cancellationToken)
     {
+        if (_isUpdatingApiKey)
+        {
+            return false;
+        }
+
         var apiKeys = NormalizeApiKeyPoolInput(ApiKeyTextBox.Text);
         if (string.IsNullOrWhiteSpace(apiKeys))
         {
             if (requireKey)
             {
-                StatusText.Text = "Status: Paste one or more Gemini API keys before saving.";
-                AiBackendStatusText.Text = "AI backend: Paste one or more Gemini API keys, then click Save API Keys.";
+                StatusText.Text = "Status: Paste a Gemini API key first.";
+                AiBackendStatusText.Text = "AI backend: Paste a Gemini API key to save it automatically.";
             }
 
             return !requireKey;
         }
 
+        if (!TryValidateApiKeyPool(apiKeys, out var validationMessage))
+        {
+            ApiKeyPoolSummaryText.Text = validationMessage;
+            StatusText.Text = $"Status: {validationMessage}";
+            AiBackendStatusText.Text = $"AI backend: {validationMessage}";
+            AiBackendHealthText.Text = "Health: API key was not saved.";
+            return false;
+        }
+
+        if (string.Equals(apiKeys, _lastSavedApiKeyPool, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        _isUpdatingApiKey = true;
+        AddApiKeyButton.IsEnabled = false;
         var keyCount = CountApiKeys(apiKeys);
-        await _runtimeGeminiClient.UpdateRuntimeApiKeyAsync(apiKeys, cancellationToken);
-        var saved = await _runtimeLaunchProfileService.UpdateApiKeysAsync(apiKeys);
-        ApiKeyTextBox.Text = FormatApiKeyPoolForDisplay(apiKeys);
-        UpdateApiKeyLineNumbers();
-        ApiKeyPoolSummaryText.Text = FormatApiKeyPoolSummary(keyCount);
-        StatusText.Text = saved
-            ? $"Status: API key pool saved with {keyCount} key{(keyCount == 1 ? string.Empty : "s")} for this session and future restarts."
-            : $"Status: API key pool updated with {keyCount} key{(keyCount == 1 ? string.Empty : "s")} for this session.";
-        AiBackendStatusText.Text = $"AI backend: API key pool replaced with {keyCount} key{(keyCount == 1 ? string.Empty : "s")}. Rotation is active for API LLM mode.";
-        AiBackendHealthText.Text = "Health: API key pool saved locally with Windows DPAPI protection.";
-        return true;
+        ApiKeyPoolSummaryText.Text = $"Checking and saving {keyCount} key{(keyCount == 1 ? string.Empty : "s")}...";
+
+        try
+        {
+            await _runtimeGeminiClient.UpdateRuntimeApiKeyAsync(apiKeys, cancellationToken);
+            var saved = await _runtimeLaunchProfileService.UpdateApiKeysAsync(apiKeys);
+            var formattedKeys = FormatApiKeyPoolForDisplay(apiKeys);
+            _isLoadingApiKeyPool = true;
+            try
+            {
+                if (!string.Equals(ApiKeyTextBox.Text, formattedKeys, StringComparison.Ordinal))
+                {
+                    ApiKeyTextBox.Text = formattedKeys;
+                }
+            }
+            finally
+            {
+                _isLoadingApiKeyPool = false;
+            }
+
+            _lastSavedApiKeyPool = apiKeys;
+            UpdateApiKeyLineNumbers();
+            UpdateApiKeyEditorHeight();
+            ApiKeyPoolSummaryText.Text = FormatApiKeyPoolSummary(keyCount);
+            StatusText.Text = saved
+                ? $"Status: {keyCount} API key{(keyCount == 1 ? string.Empty : "s")} saved automatically for this session and future restarts."
+                : $"Status: {keyCount} API key{(keyCount == 1 ? string.Empty : "s")} saved for this session.";
+            AiBackendStatusText.Text = $"AI backend: {keyCount} API key{(keyCount == 1 ? string.Empty : "s")} saved. Rotation is active in API LLM mode.";
+            AiBackendHealthText.Text = "Health: API key pool saved locally with Windows DPAPI protection. Press Test to confirm provider access.";
+            return true;
+        }
+        finally
+        {
+            _isUpdatingApiKey = false;
+            AddApiKeyButton.IsEnabled = !_isUpdatingAiBackend;
+        }
+    }
+
+    private static bool TryValidateApiKeyPool(string value, out string message)
+    {
+        var keys = NormalizeApiKeyPoolInput(value)
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        for (var index = 0; index < keys.Length; index++)
+        {
+            var key = keys[index];
+            var looksLikePlaceholder =
+                key.Contains("PASTE_YOUR", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("DEMO_KEY", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("demo-key", StringComparison.OrdinalIgnoreCase) ||
+                key.All(character => character is 'x' or 'X' or '-' or '_');
+            var hasOnlySupportedCharacters = key.All(character =>
+                char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
+            var hasGeminiApiKeyShape =
+                key.StartsWith("AIza", StringComparison.Ordinal) &&
+                key.Length is >= 30 and <= 80;
+
+            if (!hasGeminiApiKeyShape || looksLikePlaceholder || !hasOnlySupportedCharacters)
+            {
+                message = $"Key {index + 1} does not look like a valid Gemini API key. Check it and paste again.";
+                return false;
+            }
+        }
+
+        message = string.Empty;
+        return keys.Length > 0;
     }
 
     private async Task UseLocalBackendAsync()
@@ -2002,7 +2076,7 @@ public partial class MainWindow : Window
         if (details.Contains("No Gemini API keys are configured", StringComparison.OrdinalIgnoreCase) ||
             details.Contains("GOOGLE_API_KEY", StringComparison.OrdinalIgnoreCase))
         {
-            return "AI backend: No API keys are saved yet. Paste one or more keys and click Save API Keys.";
+            return "AI backend: No API keys are saved yet. Paste a Gemini API key and wait for the saved confirmation.";
         }
 
         if (details.Contains("All Gemini API keys are temporarily unavailable", StringComparison.OrdinalIgnoreCase))
@@ -2048,7 +2122,7 @@ public partial class MainWindow : Window
         AiBackendCombo.IsEnabled = enabled;
         UseApiBackendButton.IsEnabled = enabled;
         TestApiBackendButton.IsEnabled = enabled;
-        SetApiKeyButton.IsEnabled = enabled && !_isUpdatingApiKey;
+        AddApiKeyButton.IsEnabled = enabled && !_isUpdatingApiKey;
         OpenApiKeyHelpButton.IsEnabled = enabled;
         UseLocalBackendButton.IsEnabled = enabled;
         CheckLocalBackendButton.IsEnabled = enabled;
@@ -2498,13 +2572,19 @@ public partial class MainWindow : Window
             var apiKeys = !string.IsNullOrWhiteSpace(profile.ApiKeys)
                 ? profile.ApiKeys
                 : profile.ApiKey;
-            ApiKeyTextBox.Text = FormatApiKeyPoolForDisplay(apiKeys);
+            var normalizedApiKeys = NormalizeApiKeyPoolInput(apiKeys);
+            _isLoadingApiKeyPool = true;
+            ApiKeyTextBox.Text = FormatApiKeyPoolForDisplay(normalizedApiKeys);
+            _isLoadingApiKeyPool = false;
+            _lastSavedApiKeyPool = normalizedApiKeys;
             UpdateApiKeyLineNumbers();
-            ApiKeyPoolSummaryText.Text = FormatApiKeyPoolSummary(CountApiKeys(apiKeys));
+            UpdateApiKeyEditorHeight();
+            ApiKeyPoolSummaryText.Text = FormatApiKeyPoolSummary(CountApiKeys(normalizedApiKeys));
             ResetApiKeyViewport();
         }
         catch
         {
+            _isLoadingApiKeyPool = false;
             ApiKeyPoolSummaryText.Text = "Saved API keys: unavailable. Paste keys to replace the pool.";
         }
     }
@@ -2687,8 +2767,8 @@ public partial class MainWindow : Window
     private static string FormatApiKeyPoolSummary(int keyCount)
     {
         return keyCount > 0
-            ? $"Saved API keys: {keyCount} key{(keyCount == 1 ? string.Empty : "s")} in rotation. Paste new keys only when you want to replace the pool."
-            : "Saved API keys: none yet. Paste one or more keys to enable API LLM mode.";
+            ? $"Saved API keys: {keyCount} key{(keyCount == 1 ? string.Empty : "s")} in rotation. Changes save automatically."
+            : "Saved API keys: none yet. Paste one key to enable API LLM mode.";
     }
 
     private static string FormatBytes(long bytes)
@@ -2762,7 +2842,7 @@ public partial class MainWindow : Window
             () =>
             {
                 UpdateApiKeyLineNumbers();
-                ResetApiKeyViewport();
+                UpdateApiKeyEditorHeight();
             },
             DispatcherPriority.Background);
     }
@@ -2770,7 +2850,46 @@ public partial class MainWindow : Window
     private void ApiKeyTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
         UpdateApiKeyLineNumbers();
+        UpdateApiKeyEditorHeight();
         SyncApiKeyLineNumberScroll();
+        ScheduleApiKeyAutoSave();
+    }
+
+    private void ScheduleApiKeyAutoSave()
+    {
+        if (_isLoadingApiKeyPool)
+        {
+            return;
+        }
+
+        _apiKeyAutoSaveCts?.Cancel();
+        _apiKeyAutoSaveCts?.Dispose();
+        _apiKeyAutoSaveCts = new CancellationTokenSource();
+        _ = AutoSaveApiKeyPoolAfterDelayAsync(_apiKeyAutoSaveCts.Token);
+    }
+
+    private async Task AutoSaveApiKeyPoolAfterDelayAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(1200, token);
+            while (_isUpdatingApiKey)
+            {
+                await Task.Delay(150, token);
+            }
+
+            await SaveApiKeyPoolFromUiAsync(requireKey: false, token);
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer edit superseded this pending save.
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Status: API key could not be saved. {ex.Message}";
+            AiBackendStatusText.Text = $"AI backend: API key save failed. {ex.Message}";
+            AiBackendHealthText.Text = "Health: Existing saved keys were left unchanged.";
+        }
     }
 
     private void ApiKeyTextBox_OnScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -2790,6 +2909,17 @@ public partial class MainWindow : Window
         ApiKeyLineNumbersText.Text = string.Join(
             Environment.NewLine,
             Enumerable.Range(1, lineCount).Select(line => $"{line}:"));
+    }
+
+    private void UpdateApiKeyEditorHeight()
+    {
+        if (ApiKeyEditorBorder is null || ApiKeyTextBox is null)
+        {
+            return;
+        }
+
+        var lineCount = Math.Max(1, (ApiKeyTextBox.Text ?? string.Empty).Split('\n').Length);
+        ApiKeyEditorBorder.Height = Math.Clamp(44 + ((lineCount - 1) * 18), 44, 126);
     }
 
     private void SyncApiKeyLineNumberScroll()

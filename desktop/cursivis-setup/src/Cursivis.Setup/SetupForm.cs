@@ -127,7 +127,7 @@ public sealed class SetupForm : Form
         };
 
         detailsButton.Text = "Details";
-        detailsButton.Width = 104;
+        detailsButton.Width = GetDetailsButtonWidth(detailsButton.Text);
         detailsButton.Height = 38;
         detailsButton.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
         detailsButton.FlatStyle = FlatStyle.System;
@@ -182,6 +182,7 @@ public sealed class SetupForm : Form
         {
             await InstallAsync(cancellation.Token);
             HideDetails();
+            SetProgress(100);
             SetStatus("Setup complete", "Cursivis is ready. Open Settings to add a Gemini API key, then start using Cursivis.");
             Log("Done. You can close this setup window.");
         }
@@ -192,7 +193,7 @@ public sealed class SetupForm : Form
         }
         catch (Exception ex)
         {
-            SetStatus("Setup needs attention", "Cursivis could not finish setup. Your previous installation is still available. Select Details if you need to share the support log.");
+            SetStatus("Setup needs attention", $"{ex.Message} Select Details if you need to share the support log.");
             Log("ERROR: " + ex);
             ShowDetails();
         }
@@ -228,6 +229,7 @@ public sealed class SetupForm : Form
         var runtimeCommitted = false;
         var previousRuntimeExisted = false;
 
+        SetProgress(0);
         SetStatus("Preparing setup", "Checking the existing installation and preparing a safe update.");
         await Task.Run(() =>
         {
@@ -239,6 +241,7 @@ public sealed class SetupForm : Form
         {
             SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package from GitHub Releases.");
             await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
+            SetProgress(20);
 
             SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
             var packageRoot = Path.Combine(extractRoot, $"CursivisRuntime_{PackageVersion}");
@@ -254,6 +257,7 @@ public sealed class SetupForm : Form
 
                 ValidateRuntimePayload(payloadRoot);
             }, token);
+            SetProgress(40);
 
             SetStatus("Step 3 of 5: Staging runtime files", "Preparing the update without changing your working installation.");
             await Task.Run(() =>
@@ -261,9 +265,11 @@ public sealed class SetupForm : Form
                 CopyDirectory(payloadRoot, stagingRoot);
                 ValidateRuntimePayload(stagingRoot);
             }, token);
+            SetProgress(60);
 
             SetStatus("Step 4 of 5: Verifying runtime", "Checking the bundled backend and Live Mode dependencies.");
             await Task.Run(() => ValidateRuntimePayload(stagingRoot), token);
+            SetProgress(80);
 
             SetStatus("Step 5 of 5: Activating update", "Stopping the old runtime briefly and switching to the verified files.");
             try
@@ -277,6 +283,7 @@ public sealed class SetupForm : Form
                     CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
                 }, token);
                 runtimeCommitted = true;
+                SetProgress(88);
             }
             catch (Exception commitError)
             {
@@ -311,6 +318,7 @@ public sealed class SetupForm : Form
                 RegisterStartup(installRoot);
                 LaunchCompanion(installRoot);
                 LaunchHotkeyHost(installRoot);
+                SetProgress(92);
                 SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
                 await WaitForRuntimeServicesAsync(token);
                 Log("Companion backend and browser services are ready.");
@@ -322,7 +330,9 @@ public sealed class SetupForm : Form
             }
             catch (Exception activationError)
             {
-                Log("Activation failed. Restoring the previous runtime.");
+                Log(previousRuntimeExisted
+                    ? "Activation failed. Restoring the previous runtime."
+                    : "Activation failed. Removing the incomplete runtime.");
                 await Task.Run(() =>
                 {
                     StopInstalledRuntimeProcesses(installRoot);
@@ -340,7 +350,9 @@ public sealed class SetupForm : Form
                 }
 
                 throw new InvalidOperationException(
-                    "Cursivis could not activate the update, so the previous working runtime was restored.",
+                    previousRuntimeExisted
+                        ? "Cursivis could not activate the update, so the previous working runtime was restored."
+                        : "Cursivis could not finish its first launch. No incomplete runtime was left installed. Please run Setup again.",
                     activationError);
             }
         }
@@ -405,7 +417,7 @@ public sealed class SetupForm : Form
                         readTotal += read;
                         if (total.HasValue && total.Value > 0)
                         {
-                            var percent = (int)Math.Min(100, readTotal * 100 / total.Value);
+                            var percent = (int)Math.Min(20, readTotal * 20 / total.Value);
                             BeginInvoke(() => progressBar.Value = percent);
                         }
                     }
@@ -486,6 +498,7 @@ public sealed class SetupForm : Form
     {
         logBox.Visible = true;
         detailsButton.Text = "Hide Details";
+        detailsButton.Width = GetDetailsButtonWidth(detailsButton.Text);
         Height = Math.Max(Height, 570);
     }
 
@@ -493,7 +506,14 @@ public sealed class SetupForm : Form
     {
         logBox.Visible = false;
         detailsButton.Text = "Details";
+        detailsButton.Width = GetDetailsButtonWidth(detailsButton.Text);
         Height = Math.Max(MinimumSize.Height, 392);
+    }
+
+    private int GetDetailsButtonWidth(string text)
+    {
+        var textWidth = TextRenderer.MeasureText(text, detailsButton.Font).Width;
+        return Math.Max(104, textWidth + 36);
     }
 
     private static void VerifySha256(string path, string expectedSha256)
@@ -990,7 +1010,9 @@ public sealed class SetupForm : Form
             "http://127.0.0.1:48820/health",
             "http://127.0.0.1:48830/health"
         };
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
+        var startedAt = DateTime.UtcNow;
+        var deadline = startedAt + TimeSpan.FromMinutes(3);
+        var nextProgressLog = startedAt + TimeSpan.FromSeconds(45);
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
         while (pending.Count > 0 && DateTime.UtcNow < deadline)
@@ -1014,16 +1036,39 @@ public sealed class SetupForm : Form
 
             if (pending.Count > 0)
             {
+                if (DateTime.UtcNow >= nextProgressLog)
+                {
+                    var pendingServices = string.Join(", ", pending.Select(DescribeRuntimeService));
+                    Log($"Still waiting for local services: {pendingServices}.");
+                    SetStatus(
+                        "Step 5 of 5: Finishing first launch",
+                        "This PC is taking a little longer to start Cursivis. Setup is still working safely.");
+                    SetProgress(95);
+                    nextProgressLog = DateTime.UtcNow + TimeSpan.FromSeconds(45);
+                }
+
                 await Task.Delay(750, token);
             }
         }
 
         if (pending.Count > 0)
         {
+            var pendingServices = string.Join(", ", pending.Select(DescribeRuntimeService));
             throw new InvalidOperationException(
-                "Cursivis installed, but one or more local services did not start. " +
+                $"Cursivis installed, but {pendingServices} did not start. " +
                 "Restart Windows and run Setup again if the issue continues.");
         }
+    }
+
+    private static string DescribeRuntimeService(string endpoint)
+    {
+        return endpoint switch
+        {
+            "http://127.0.0.1:51880/health" => "the AI service",
+            "http://127.0.0.1:48820/health" => "the browser action service",
+            "http://127.0.0.1:48830/health" => "the browser connection service",
+            _ => "a local service"
+        };
     }
 
     private static string WriteRuntimeProfile(string root)
@@ -1179,6 +1224,18 @@ public sealed class SetupForm : Form
 
         statusLabel.Text = status;
         detailLabel.Text = detail;
+    }
+
+    private void SetProgress(int value)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => SetProgress(value));
+            return;
+        }
+
+        progressBar.Style = ProgressBarStyle.Continuous;
+        progressBar.Value = Math.Clamp(value, progressBar.Minimum, progressBar.Maximum);
     }
 
     private void Log(string message)

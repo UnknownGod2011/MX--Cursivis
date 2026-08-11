@@ -576,17 +576,18 @@
                                        FontSize="12"
                                        Text="API key pool" />
                             <TextBlock Margin="0,4,0,8"
-                                       Style="{StaticResource SubtleTextStyle}"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       Text="Paste one Gemini API key per line. The line numbers are only a guide and cannot be edited. Saving replaces the pool used for automatic key rotation." />
+                                        Style="{StaticResource SubtleTextStyle}"
+                                        FontSize="11"
+                                        TextWrapping="Wrap"
+                                        Text="Paste a Gemini API key and it saves automatically. Choose Add key only when you want another key in the rotation pool; Test confirms the saved pool can connect." />
                             <TextBlock x:Name="ApiKeyPoolSummaryText"
                                        Margin="0,0,0,8"
                                        Style="{StaticResource SubtleTextStyle}"
                                        FontSize="10.5"
                                        TextWrapping="Wrap"
                                        Text="Saved API keys: checking..." />
-                            <Border Height="126"
+                            <Border x:Name="ApiKeyEditorBorder"
+                                    Height="44"
                                     CornerRadius="14"
                                     Background="{DynamicResource Brush.InputBackground}"
                                     BorderBrush="{DynamicResource Brush.InputBorder}"
@@ -609,7 +610,8 @@
                                                    Style="{StaticResource SubtleTextStyle}"
                                                    FontFamily="Cascadia Mono, Consolas"
                                                    FontSize="12"
-                                                   LineHeight="18"
+                                                   LineHeight="15"
+                                                   LineStackingStrategy="BlockLineHeight"
                                                    Text="1:" />
                                     </Border>
                                     <TextBox x:Name="ApiKeyTextBox"
@@ -631,7 +633,7 @@
                                              TextWrapping="NoWrap"
                                              AcceptsReturn="True"
                                              HorizontalScrollBarVisibility="Disabled"
-                                             VerticalScrollBarVisibility="Visible"
+                                             VerticalScrollBarVisibility="Auto"
                                              TextChanged="ApiKeyTextBox_OnTextChanged">
                                         <TextBox.Resources>
                                             <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
@@ -640,12 +642,12 @@
                                 </Grid>
                             </Border>
                             <UniformGrid Columns="2" Rows="1" Margin="0,10,0,0">
-                                <Button x:Name="SetApiKeyButton"
+                                <Button x:Name="AddApiKeyButton"
                                         Height="38"
                                         Margin="0,0,8,0"
-                                        Style="{StaticResource AccentButtonStyle}"
-                                        Content="Save API Keys"
-                                        Click="SetApiKeyButton_OnClick" />
+                                        Style="{StaticResource MutedButtonStyle}"
+                                        Content="Add key"
+                                        Click="AddApiKeyButton_OnClick" />
                                 <Button x:Name="OpenApiKeyHelpButton"
                                         Height="38"
                                         Style="{StaticResource MutedButtonStyle}"
@@ -1091,7 +1093,7 @@
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource HeadlineTextStyle}" FontSize="13" Text="1. Connect your AI" />
                                     <TextBlock Margin="0,6,0,0" Style="{StaticResource SubtleTextStyle}" FontSize="11.5" TextWrapping="Wrap"
-                                               Text="Choose API LLM (Recommended), paste your Gemini API key, then press Save API Keys and Test. Local LLM stays private on your PC, but needs Ollama and a downloaded model." />
+                                               Text="Choose API LLM (Recommended), paste your Gemini API key, wait for the saved confirmation, then press Test. Local LLM stays private on your PC, but needs Ollama and a downloaded model." />
                                 </StackPanel>
                             </Border>
 
