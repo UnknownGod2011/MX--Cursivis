@@ -1163,7 +1163,7 @@ public sealed class SetupForm : Form
         }
     }
 
-    private static void RegisterStartup(string root)
+    private void RegisterStartup(string root)
     {
         using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
         var companionExe = Path.Combine(root, "app", "companion", "Cursivis.Companion.exe");
@@ -1177,6 +1177,31 @@ public sealed class SetupForm : Form
         if (File.Exists(hotkeyExe))
         {
             key?.SetValue("CursivisHotkeyHost", $"\"{hotkeyExe}\"", RegistryValueKind.String);
+        }
+
+        RemoveLegacyStartupShortcut();
+    }
+
+    private void RemoveLegacyStartupShortcut()
+    {
+        var startupDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        if (string.IsNullOrWhiteSpace(startupDirectory))
+        {
+            return;
+        }
+
+        var shortcutPath = Path.Combine(startupDirectory, "Cursivis Companion.lnk");
+        try
+        {
+            if (File.Exists(shortcutPath))
+            {
+                File.Delete(shortcutPath);
+                Log("Removed the legacy Companion startup shortcut.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log($"The legacy Companion startup shortcut could not be removed: {ex.Message}");
         }
     }
 
