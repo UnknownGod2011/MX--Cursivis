@@ -12,6 +12,12 @@ obj/
 artifacts/
 .codex-temp/
 
+# Local Cursor / SpecStory / agent memory
+.cursor/
+.cursorindexingignore
+.specstory/
+AGENTS.md
+
 # Browser profile data
 desktop/browser-action-agent/data/browser-profile/
 

@@ -66,7 +66,7 @@ function getErrorText(error) {
 
 function redactSensitiveText(value) {
   return String(value || "")
-    .replace(/AIza[\w-]{20,}/g, "[REDACTED_API_KEY]")
+    .replace(/(?:AIza[\w-]{20,}|AQ\.[A-Za-z0-9._-]{20,})/g, "[REDACTED_API_KEY]")
     .replace(/\bsk-[A-Za-z0-9_-]{10,}/g, "[REDACTED_API_KEY]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{10,}/gi, "Bearer [REDACTED]")
     .replace(/([?&](?:key|api[_-]?key)=)[^&\s]+/gi, "$1[REDACTED]")

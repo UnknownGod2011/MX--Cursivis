@@ -22,11 +22,12 @@ function retryOptions(retryDelaysMs = [0, 0]) {
 
 test("diagnostics redact provider credentials without hiding useful status", () => {
   const fakeGeminiKey = `AI${"za"}${"x".repeat(24)}`;
+  const fakeAuthGeminiKey = `AQ.${"Ab"}${"z".repeat(24)}`;
   const fakeProviderKey = `s${"k-"}${"y".repeat(24)}`;
   const fakeBearerToken = "b".repeat(24);
   const error = new Error(
     `503 UNAVAILABLE Authorization: Bearer ${fakeBearerToken} ` +
-      `key=${fakeGeminiKey} ${fakeProviderKey}`
+      `key=${fakeGeminiKey} ${fakeAuthGeminiKey} ${fakeProviderKey}`
   );
 
   const diagnostics = getGeminiErrorDiagnostics(error);

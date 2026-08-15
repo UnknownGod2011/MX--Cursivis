@@ -358,7 +358,7 @@ If you are working from a downloaded ZIP instead of `git clone`, just open the e
 
 ### 3. Set the backend key
 
-The current default backend adapter in this repo expects `GOOGLE_API_KEY`.
+The current default backend adapter in this repo expects `GOOGLE_API_KEY`. Settings and env vars accept both legacy standard keys (`AIza…`) and current Google AI Studio auth keys (`AQ.…`).
 
 ```powershell
 $env:GOOGLE_API_KEY = "<YOUR_API_KEY>"
