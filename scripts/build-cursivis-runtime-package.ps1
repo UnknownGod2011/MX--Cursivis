@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1_5_2",
+    [string]$Version = "1_5_3",
     [string]$NodeVersion = "v22.22.0",
     [string]$NodeSourceDirectory = "",
     [switch]$SkipDotnetPublish,
@@ -99,6 +99,13 @@ function Get-NodeVersion {
     }
 }
 
+function Test-NodeHasNpm {
+    param([Parameter(Mandatory = $true)][string]$NodeExe)
+
+    $npmCli = Join-Path (Split-Path -Parent $NodeExe) "node_modules\npm\bin\npm-cli.js"
+    return Test-Path -LiteralPath $npmCli
+}
+
 function Resolve-PortableNodeSource {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
@@ -118,7 +125,7 @@ function Resolve-PortableNodeSource {
 
     foreach ($candidate in $candidates | Select-Object -Unique) {
         $nodeExe = Join-Path $candidate "node.exe"
-        if ((Get-NodeVersion -NodeExe $nodeExe) -eq $Version) {
+        if ((Get-NodeVersion -NodeExe $nodeExe) -eq $Version -and (Test-NodeHasNpm -NodeExe $nodeExe)) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
@@ -153,8 +160,9 @@ function Resolve-PortableNodeSource {
     }
 
     Expand-Archive -LiteralPath $archivePath -DestinationPath $cacheRoot -Force
-    if ((Get-NodeVersion -NodeExe (Join-Path $expanded "node.exe")) -ne $Version) {
-        throw "The extracted Node.js runtime did not report the expected version $Version."
+    $expandedNode = Join-Path $expanded "node.exe"
+    if ((Get-NodeVersion -NodeExe $expandedNode) -ne $Version -or -not (Test-NodeHasNpm -NodeExe $expandedNode)) {
+        throw "The extracted Node.js runtime did not provide the expected Node.js version and npm tooling."
     }
 
     return $expanded

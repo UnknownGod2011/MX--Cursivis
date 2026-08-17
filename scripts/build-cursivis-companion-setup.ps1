@@ -1,6 +1,6 @@
 param(
-    [string]$Version = "1_5_2",
-    [string]$RuntimeUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.2/CursivisRuntime_1_5_2.zip",
+    [string]$Version = "1_5_3",
+    [string]$RuntimeUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisRuntime_1_5_3.zip",
     [switch]$AllowLocalRuntimeUrl
 )
 

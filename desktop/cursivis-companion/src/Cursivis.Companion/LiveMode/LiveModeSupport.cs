@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 
 namespace Cursivis.Companion.LiveMode;
 
+using Cursivis.Companion.Services;
+
 public enum LiveModePermissionMode
 {
     AlwaysAsk,
@@ -336,7 +338,7 @@ internal static class LiveModeLog
 
     private static void Write(string level, string text)
     {
-        var line = $"{DateTimeOffset.Now:O} [{level}] {text}";
+        var line = $"{DateTimeOffset.Now:O} [{level}] {CredentialRedactor.Redact(text)}";
         Debug.WriteLine(line);
         try
         {

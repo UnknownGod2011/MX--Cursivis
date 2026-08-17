@@ -14,6 +14,7 @@ import {
   classifyGeminiError,
   hasConfiguredApiKeys
 } from "./apiKeyPool.js";
+import { redactGeminiCredentials, validateGeminiApiKeyPool } from "./geminiCredentials.js";
 import { createBrowserActionPlanner, createBrowserActionPlanRefiner } from "./browserActionPlanner.js";
 import { describeDominantColorsFromImage } from "./imageAnalysis.js";
 import { createSchemaValidators } from "./schemas.js";
@@ -37,10 +38,10 @@ function withTimeout(promise, timeoutMs, fallbackValue) {
 
 function getErrorMessage(error) {
   if (error instanceof Error) {
-    return error.message;
+    return redactGeminiCredentials(error.message);
   }
 
-  return String(error);
+  return redactGeminiCredentials(error);
 }
 
 function extractRetryAfterSeconds(message) {
@@ -873,16 +874,13 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
   });
 
   app.post("/runtime/api-key", (req, res) => {
-    const rawApiKey = String(req.body?.apiKey || "").trim();
-    const apiKeys = rawApiKey
-      .split(/[,\n;\r]+/)
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    if (apiKeys.length === 0) {
-      res.status(400).json({ error: "A valid Gemini API key is required." });
+    const validation = validateGeminiApiKeyPool(req.body?.apiKey);
+    if (!validation.ok) {
+      res.status(400).json({ error: validation.error });
       return;
     }
+
+    const { keys: apiKeys } = validation;
 
     process.env.GOOGLE_API_KEY = apiKeys[0];
     process.env.GEMINI_API_KEY = apiKeys[0];
@@ -891,7 +889,6 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
 
     res.json({
       ok: true,
-      activeKeyPreview: `${apiKeys[0].slice(0, 6)}...${apiKeys[0].slice(-4)}`,
       totalKeys: apiKeys.length
     });
   });

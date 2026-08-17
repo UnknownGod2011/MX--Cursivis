@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { redactGeminiCredentials } from "./geminiCredentials.js";
 
 const LOG_DIRECTORY = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, "Cursivis", "Logs")
@@ -65,10 +66,7 @@ function getErrorText(error) {
 }
 
 function redactSensitiveText(value) {
-  return String(value || "")
-    .replace(/AIza[\w-]{20,}/g, "[REDACTED_API_KEY]")
+  return redactGeminiCredentials(value)
     .replace(/\bsk-[A-Za-z0-9_-]{10,}/g, "[REDACTED_API_KEY]")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{10,}/gi, "Bearer [REDACTED]")
-    .replace(/([?&](?:key|api[_-]?key)=)[^&\s]+/gi, "$1[REDACTED]")
     .replace(/\s+/g, " ");
 }

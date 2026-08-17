@@ -1013,7 +1013,7 @@ public sealed class GeminiClient : IDisposable
                     return $"Gemini quota/rate limit reached for the current API key or project. Retry after about {retry} seconds, or switch to a different key/project with available quota.";
                 }
 
-                return message;
+                return CredentialRedactor.Redact(message);
             }
         }
         catch
@@ -1021,7 +1021,7 @@ public sealed class GeminiClient : IDisposable
             // Fallback to raw response below.
         }
 
-        return $"Backend error {(int)statusCode}: {responseBody}";
+        return $"Backend error {(int)statusCode}: {CredentialRedactor.Redact(responseBody)}";
     }
 
     private static T? TryDeserialize<T>(string body)

@@ -2,6 +2,7 @@
 
 namespace Cursivis.Companion.LiveMode;
 
+using Cursivis.Companion.Services;
 using System.Net.WebSockets;
 using System.IO;
 using System.Text;
@@ -1140,7 +1141,7 @@ public sealed class GeminiLiveConversationService : IDisposable
             return "The live session timed out. Check the internet connection and try again.";
         if (ex is WebSocketException)
             return "Cursivis Live Mode could not connect. Check API access and the internet connection.";
-        return ex.Message;
+        return CredentialRedactor.Redact(ex.Message);
     }
 
     private static string ToneInstruction(LiveModeAssistantTone tone) => tone switch

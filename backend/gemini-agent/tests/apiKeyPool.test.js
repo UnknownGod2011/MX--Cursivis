@@ -34,6 +34,26 @@ test("rotates to the next configured API key when the current key is quota-limit
   assert.deepEqual(attemptedKeys, ["key-one", "key-two"]);
 });
 
+test("rotates across a mixed legacy and auth-key pool", async () => {
+  clearApiKeyPoolState();
+  const legacyKey = `AIza${"Abc123_-".repeat(5)}`;
+  const authKey = `AQ.${"Zx9_.-".repeat(8)}`;
+  process.env.GOOGLE_API_KEYS = `${legacyKey},${authKey}`;
+
+  const attemptedIndexes = [];
+  const result = await withGoogleGenAiClient(async (_client, entry) => {
+    attemptedIndexes.push(entry.index);
+    if (entry.index === 0) {
+      throw new Error("RESOURCE_EXHAUSTED: retry in 12s");
+    }
+
+    return entry.index;
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(attemptedIndexes, [0, 1]);
+});
+
 test("keeps exhausted keys on cooldown for the next request and skips them immediately", async () => {
   clearApiKeyPoolState();
   process.env.GOOGLE_API_KEYS = "alpha,beta";

@@ -6,6 +6,7 @@ import {
   markEntryFailure,
   withGoogleGenAiClient
 } from "./apiKeyPool.js";
+import { redactGeminiCredentials } from "./geminiCredentials.js";
 
 const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview";
 const LIVE_PATH = process.env.CURSIVIS_LIVE_VOICE_PATH || "/live";
@@ -74,7 +75,7 @@ export function attachLiveGateway(server) {
 
                 safeSend(socket, {
                   type: "error",
-                  error: message
+                  error: redactGeminiCredentials(message)
                 });
               },
               onclose: () => {
@@ -120,7 +121,7 @@ export function attachLiveGateway(server) {
         } catch (error) {
           safeSend(socket, {
             type: "error",
-            error: error instanceof Error ? error.message : String(error)
+            error: redactGeminiCredentials(error instanceof Error ? error.message : error)
           });
         }
       });
@@ -135,7 +136,7 @@ export function attachLiveGateway(server) {
     } catch (error) {
       safeSend(socket, {
         type: "error",
-        error: error instanceof Error ? error.message : String(error)
+        error: redactGeminiCredentials(error instanceof Error ? error.message : error)
       });
       socket.close();
     }

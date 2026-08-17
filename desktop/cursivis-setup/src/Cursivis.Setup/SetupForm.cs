@@ -11,10 +11,10 @@ using System.Text.Json;
 
 public sealed class SetupForm : Form
 {
-    private const string DisplayVersion = "1.5.2";
-    private const string PackageVersion = "1_5_2";
+    private const string DisplayVersion = "1.5.3";
+    private const string PackageVersion = "1_5_3";
     private const string DefaultRuntimeZipUrl =
-        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.2/CursivisRuntime_1_5_2.zip";
+        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisRuntime_1_5_3.zip";
     private static readonly string[] RuntimePayloadDirectories = ["app", "backend", "desktop", "node", "shared"];
     private static readonly string RuntimeZipUrl =
         typeof(SetupForm).Assembly

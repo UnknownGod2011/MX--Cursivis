@@ -192,7 +192,7 @@ public partial class App : Application
         {
             LiveModeLog.Error(ex, "Companion startup failed");
             MessageBox.Show(
-                $"Companion startup failed:\n{ex.Message}",
+                $"Companion startup failed:\n{CredentialRedactor.Redact(ex.Message)}",
                 "Cursivis",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);

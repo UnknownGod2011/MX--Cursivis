@@ -989,7 +989,7 @@ public partial class MainWindow : Window
             return !requireKey;
         }
 
-        if (!TryValidateApiKeyPool(apiKeys, out var validationMessage))
+        if (!GeminiApiKeyPoolValidator.TryValidate(apiKeys, out var validationMessage))
         {
             ApiKeyPoolSummaryText.Text = validationMessage;
             StatusText.Text = $"Status: {validationMessage}";
@@ -1042,36 +1042,6 @@ public partial class MainWindow : Window
             _isUpdatingApiKey = false;
             AddApiKeyButton.IsEnabled = !_isUpdatingAiBackend;
         }
-    }
-
-    private static bool TryValidateApiKeyPool(string value, out string message)
-    {
-        var keys = NormalizeApiKeyPoolInput(value)
-            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        for (var index = 0; index < keys.Length; index++)
-        {
-            var key = keys[index];
-            var looksLikePlaceholder =
-                key.Contains("PASTE_YOUR", StringComparison.OrdinalIgnoreCase) ||
-                key.Contains("DEMO_KEY", StringComparison.OrdinalIgnoreCase) ||
-                key.Contains("demo-key", StringComparison.OrdinalIgnoreCase) ||
-                key.All(character => character is 'x' or 'X' or '-' or '_');
-            var hasOnlySupportedCharacters = key.All(character =>
-                char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
-            var hasGeminiApiKeyShape =
-                key.StartsWith("AIza", StringComparison.Ordinal) &&
-                key.Length is >= 30 and <= 80;
-
-            if (!hasGeminiApiKeyShape || looksLikePlaceholder || !hasOnlySupportedCharacters)
-            {
-                message = $"Key {index + 1} does not look like a valid Gemini API key. Check it and paste again.";
-                return false;
-            }
-        }
-
-        message = string.Empty;
-        return keys.Length > 0;
     }
 
     private async Task UseLocalBackendAsync()
