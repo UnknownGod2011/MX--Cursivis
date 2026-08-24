@@ -1,7 +1,7 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [string]$Version = "1_5_2",
+    [string]$Version = "1_5_3",
     [switch]$SkipBuild,
     [switch]$InstallPackage
 )
@@ -37,6 +37,36 @@ $pluginApiPath = Join-Path ${env:ProgramFiles} "Logi\LogiPluginService\PluginApi
 $pluginLinkPath = Join-Path $env:LOCALAPPDATA "Logi\LogiPluginService\Plugins\CursivisPlugin.link"
 $pluginLogPath = Join-Path $env:LOCALAPPDATA "Logi\LogiPluginService\Logs\plugin_logs\Cursivis.log"
 $toolPath = Join-Path $env:USERPROFILE ".dotnet\tools\logiplugintool.exe"
+
+function Assert-UniversalPluginContract {
+    $pluginSource = Get-Content -LiteralPath (Join-Path $pluginRoot "src\CursivisPlugin.cs") -Raw
+    $applicationSource = Get-Content -LiteralPath (Join-Path $pluginRoot "src\CursivisApplication.cs") -Raw
+    $metadataPath = Join-Path $pluginRoot "src\package\metadata\LoupedeckPackage.yaml"
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw
+    $expectedVersion = $Version.Replace("_", ".")
+
+    if ($pluginSource -notmatch 'UsesApplicationApiOnly\s*=>\s*true\s*;' -or
+        $pluginSource -notmatch 'HasNoApplication\s*=>\s*true\s*;') {
+        throw "Cursivis must remain an API-only universal Logitech plugin."
+    }
+
+    if ($applicationSource -notmatch 'GetProcessName\(\)\s*=>\s*""\s*;' -or
+        $applicationSource -notmatch 'GetApplicationStatus\(\)\s*=>\s*ClientApplicationStatus\.Unknown\s*;') {
+        throw "The universal plugin ClientApplication must remain unbound to any foreground process."
+    }
+
+    if ($metadata -match '(?m)^\s*-\s*HasApplication\s*$') {
+        throw "Universal plugin metadata must not include HasApplication."
+    }
+
+    if ($metadata -notmatch '(?m)^\s*-\s*HasHapticsMapping\s*$') {
+        throw "Required HasHapticsMapping metadata is missing."
+    }
+
+    if ($metadata -notmatch "(?m)^version:\s*$([regex]::Escape($expectedVersion))\s*$") {
+        throw "Plugin metadata version must match package version $expectedVersion."
+    }
+}
 
 function Assert-ForbiddenFilesAbsentFromDirectory {
     param(
@@ -102,6 +132,8 @@ function Assert-InternalActionsAbsentFromPackage {
 
 Write-Host "Preparing Logitech plugin build..."
 Write-Host "Plugin project: $pluginProject"
+
+Assert-UniversalPluginContract
 
 if (-not (Test-Path $pluginApiPath)) {
     throw "Logi Plugin Service SDK runtime was not found at '$pluginApiPath'. Install Logi Options+ before building the real plugin."

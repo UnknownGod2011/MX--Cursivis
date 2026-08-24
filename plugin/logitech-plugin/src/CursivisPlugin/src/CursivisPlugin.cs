@@ -10,10 +10,10 @@ namespace Loupedeck.CursivisPlugin
         private CompanionHapticClient _companionHapticClient;
 
         // Gets a value indicating whether this is an API-only plugin.
-        public override Boolean UsesApplicationApiOnly => false;
+        public override Boolean UsesApplicationApiOnly => true;
 
         // Gets a value indicating whether this is a Universal plugin or an Application plugin.
-        public override Boolean HasNoApplication => false;
+        public override Boolean HasNoApplication => true;
 
         // Initializes a new instance of the plugin class.
         public CursivisPlugin()

@@ -86,7 +86,7 @@ namespace Loupedeck.CursivisPlugin
                     retryDelay = TimeSpan.FromSeconds(3);
                     await this.ReceiveLoopAsync(socket, cancellationToken);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }

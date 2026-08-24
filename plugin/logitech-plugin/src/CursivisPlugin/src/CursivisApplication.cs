@@ -2,7 +2,8 @@ namespace Loupedeck.CursivisPlugin
 {
     using System;
 
-    // This class can be used to connect the Loupedeck plugin to an application.
+    // The SDK requires a ClientApplication implementation even for universal plugins.
+    // Keep it deliberately unbound: Companion health is handled by TriggerIpcClient.
 
     public class CursivisApplication : ClientApplication
     {
@@ -10,16 +11,13 @@ namespace Loupedeck.CursivisPlugin
         {
         }
 
-        // This method can be used to link the plugin to a Windows application.
-        protected override String GetProcessName() => "Cursivis.Companion";
+        // A universal plugin must not be activated by any foreground process.
+        protected override String GetProcessName() => "";
 
         // This method can be used to link the plugin to a macOS application.
         protected override String GetBundleName() => "";
 
-        // This method can be used to check whether the application is installed or not.
-        public override ClientApplicationStatus GetApplicationStatus() =>
-            CompanionRuntimeState.GetSnapshot().IsInstalled
-                ? ClientApplicationStatus.Unknown
-                : ClientApplicationStatus.NotInstalled;
+        // Companion installation is runtime health, not Logitech application status.
+        public override ClientApplicationStatus GetApplicationStatus() => ClientApplicationStatus.Unknown;
     }
 }
