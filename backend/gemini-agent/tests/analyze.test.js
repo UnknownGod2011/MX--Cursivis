@@ -7,8 +7,11 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import request from "supertest";
 import sharp from "sharp";
+import { once } from "node:events";
+import http from "node:http";
 import { createAiProviderFromEnv, normalizeProviderId } from "../src/aiProviderFactory.js";
 import { createApp } from "../src/app.js";
+import { GeminiRequestStopped } from "../src/geminiRetryControl.js";
 import { createBrowserActionPlanner } from "../src/browserActionPlanner.js";
 import { detectBrowserTaskPack } from "../src/browserTaskPacks.js";
 import {
@@ -68,6 +71,33 @@ test("local model provider uses deterministic routing fallback", async () => {
   assert.equal(provider.id, "local_ollama");
   assert.equal(decision.contentType, "code");
   assert.ok(decision.bestAction);
+});
+
+test("switching away from Ollama activates the new provider while old-model cleanup is pending", async () => {
+  const oldProvider = process.env.CURSIVIS_AI_PROVIDER;
+  const unloading = Promise.withResolvers();
+  const oldModelResponse = Promise.withResolvers();
+  process.env.CURSIVIS_AI_PROVIDER = "local_ollama";
+  const originalFetch = globalThis.fetch;
+  let switching;
+  globalThis.fetch = async (url, init) => {
+    assert.match(url, /\/api\/ps$/);
+    assert.ok(init.signal instanceof AbortSignal);
+    unloading.resolve();
+    return oldModelResponse.promise;
+  };
+  try {
+    const app = createApp();
+    switching = request(app).post("/runtime/ai-provider").send({ provider: "gemini" }).then((response) => response);
+    await unloading.promise;
+    const health = await request(app).get("/health");
+    assert.equal(health.body.aiProvider, "gemini");
+  } finally {
+    oldModelResponse.resolve(new Response('{"models":[]}', { status: 200 }));
+    if (switching) await switching;
+    globalThis.fetch = originalFetch;
+    restoreEnvValue("CURSIVIS_AI_PROVIDER", oldProvider);
+  }
 });
 
 test("local model provider retries when non-code prose receives generated code", async () => {
@@ -657,6 +687,53 @@ test("returns a friendly 503 after transient Gemini routing failures are exhaust
   assert.match(response.body.error, /temporarily unavailable/i);
   assert.match(response.body.error, /retried automatically/i);
   assert.doesNotMatch(response.body.details, /high demand/i);
+});
+
+test("a Snip request reports a local deadline without claiming Gemini or its keys are unavailable", async () => {
+  const app = createApp({
+    textGenerator: async () => assert.fail("the timed out intent cannot proceed to execution"),
+    intentRouter: async ({ selectionKind }) => {
+      assert.equal(selectionKind, "image");
+      throw new GeminiRequestStopped("deadline");
+    }
+  });
+  const response = await request(app).post("/analyze").send(makeImagePayload());
+  assert.equal(response.statusCode, 504);
+  assert.match(response.body.error, /Image intent routing took too long/);
+  assert.equal(response.body.retryAfterSec, undefined);
+});
+
+test("disconnecting a desktop request cancels the active intent routing", { timeout: 5000 }, async () => {
+  const routed = Promise.withResolvers();
+  const cancelled = Promise.withResolvers();
+  const app = createApp({
+    textGenerator: async () => assert.fail("a disconnected request must not proceed to execution"),
+    intentRouter: async ({ signal }) => {
+      routed.resolve(signal);
+      if (!signal) return fakeRouter({ selectionKind: "text", text: "fixture" });
+      await once(signal, "abort");
+      cancelled.resolve();
+      throw new GeminiRequestStopped("cancelled");
+    }
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const client = http.request(`http://127.0.0.1:${server.address().port}/analyze`, {
+    method: "POST",
+    headers: { "content-type": "application/json" }
+  });
+  client.on("error", () => {});
+  try {
+    client.end(JSON.stringify(makePayload("Synthetic cancellation fixture")));
+    const signal = await routed.promise;
+    assert.ok(signal instanceof AbortSignal);
+    client.destroy();
+    await cancelled.promise;
+    assert.ok(signal.aborted);
+  } finally {
+    client.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("returns a setup-focused 401 without exposing provider details when all keys are invalid", async () => {

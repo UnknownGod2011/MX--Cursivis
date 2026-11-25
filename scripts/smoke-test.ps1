@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "local-ipc.ps1")
 
 if ($ApiKey) {
     $env:GOOGLE_API_KEY = $ApiKey
@@ -17,7 +18,7 @@ $healthUrl = "$BackendUrl/health"
 $analyzeUrl = "$BackendUrl/analyze"
 
 try {
-    $health = Invoke-RestMethod -Method Get -Uri $healthUrl -TimeoutSec 10
+    $health = (Invoke-CursivisDiagnosticRequest -Uri $healthUrl -Scope backend -TimeoutSec 10).Content | ConvertFrom-Json
 }
 catch {
     Write-Error "Health check failed: $($_.Exception.Message)"
@@ -49,7 +50,7 @@ $request = @{
 }
 
 try {
-    $response = Invoke-RestMethod -Method Post -Uri $analyzeUrl -ContentType "application/json" -Body ($request | ConvertTo-Json -Depth 8) -TimeoutSec 60
+    $response = (Invoke-CursivisDiagnosticRequest -Uri $analyzeUrl -Scope backend -Method POST -Body ($request | ConvertTo-Json -Depth 8) -TimeoutSec 60).Content | ConvertFrom-Json
 }
 catch {
     $statusCode = $null

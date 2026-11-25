@@ -8,4 +8,8 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\..\..\shared\local-ipc\LocalIpc.cs" Link="Security\LocalIpc.cs" />
+  </ItemGroup>
+
 </Project>

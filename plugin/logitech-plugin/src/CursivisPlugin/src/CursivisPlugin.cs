@@ -1,3 +1,5 @@
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
+
 namespace Loupedeck.CursivisPlugin
 {
     using System;

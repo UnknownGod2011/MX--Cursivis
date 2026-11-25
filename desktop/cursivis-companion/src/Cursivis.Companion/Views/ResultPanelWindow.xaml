@@ -137,7 +137,6 @@
                                  Background="Transparent"
                                  BorderThickness="0"
                                  Foreground="{DynamicResource Brush.TextMain}"
-                                 Focusable="False"
                                  IsReadOnly="True"
                                  IsReadOnlyCaretVisible="False"
                                  Padding="0"

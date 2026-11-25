@@ -1,21 +1,23 @@
 namespace Cursivis.Setup;
 
+using Cursivis.Security;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 public sealed class SetupForm : Form
 {
-    private const string DisplayVersion = "1.5.3";
-    private const string PackageVersion = "1_5_3";
+    private const string DisplayVersion = "1.5.4";
+    private const string PackageVersion = "1_5_4";
     private const string DefaultRuntimeZipUrl =
-        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisRuntime_1_5_3.zip";
-    private static readonly string[] RuntimePayloadDirectories = ["app", "backend", "desktop", "node", "shared"];
+        "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.4/CursivisRuntime_1_5_4.zip";
     private static readonly string RuntimeZipUrl =
         typeof(SetupForm).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -222,25 +224,22 @@ public sealed class SetupForm : Form
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Programs");
         var installRoot = Path.Combine(programsRoot, "Cursivis");
-        var legacyStagingRoot = Path.Combine(programsRoot, $"Cursivis.staging.{PackageVersion}");
-        var legacyBackupRoot = Path.Combine(programsRoot, $"Cursivis.backup.{PackageVersion}");
         var stagingRoot = CreateUpdateRoot(programsRoot, $"Cursivis.staging.{PackageVersion}");
         var backupRoot = CreateUpdateRoot(programsRoot, $"Cursivis.backup.{PackageVersion}");
-        var runtimeCommitted = false;
         var previousRuntimeExisted = false;
+        RuntimeUpdateJournal? transaction = null;
 
         SetProgress(0);
         SetStatus("Preparing setup", "Checking the existing installation and preparing a safe update.");
         await Task.Run(() =>
         {
-            RecoverInterruptedUpdate(installRoot, legacyStagingRoot, legacyBackupRoot);
+            RecoverInterruptedUpdates(programsRoot, installRoot);
             Directory.CreateDirectory(tempRoot);
         }, token);
 
         try
         {
-            SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package from GitHub Releases.");
-            await DownloadFileAsync(RuntimeZipUrl, zipPath, RuntimeZipSha256, token);
+            await AcquireRuntimeAsync(zipPath, token);
             SetProgress(20);
 
             SetStatus("Step 2 of 5: Extracting runtime", "Preparing Companion, Live Mode, backend, and trigger helpers.");
@@ -255,7 +254,7 @@ public sealed class SetupForm : Form
                     throw new InvalidOperationException("The downloaded runtime package is missing its runtime folder.");
                 }
 
-                ValidateRuntimePayload(payloadRoot);
+                ValidateRuntimePayload(payloadRoot, requireSecureIpc: true);
             }, token);
             SetProgress(40);
 
@@ -263,12 +262,12 @@ public sealed class SetupForm : Form
             await Task.Run(() =>
             {
                 CopyDirectory(payloadRoot, stagingRoot);
-                ValidateRuntimePayload(stagingRoot);
+                ValidateRuntimePayload(stagingRoot, requireSecureIpc: true);
             }, token);
             SetProgress(60);
 
             SetStatus("Step 4 of 5: Verifying runtime", "Checking the bundled backend and Live Mode dependencies.");
-            await Task.Run(() => ValidateRuntimePayload(stagingRoot), token);
+            await Task.Run(() => ValidateRuntimePayload(stagingRoot, requireSecureIpc: true), token);
             SetProgress(80);
 
             SetStatus("Step 5 of 5: Activating update", "Stopping the old runtime briefly and switching to the verified files.");
@@ -276,25 +275,29 @@ public sealed class SetupForm : Form
             {
                 await Task.Run(() =>
                 {
+                    previousRuntimeExisted = HasValidRuntimePayload(installRoot);
                     StopInstalledRuntimeProcesses(installRoot);
                     StopCursivisPortListeners(installRoot);
                     PreserveMutableRuntimeData(installRoot, stagingRoot);
-                    previousRuntimeExisted = HasValidRuntimePayload(installRoot);
-                    CommitStagedRuntime(stagingRoot, installRoot, backupRoot);
+                    transaction = RuntimeUpdateJournal.Create(installRoot, backupRoot, CaptureProtectedProfile());
+                    RuntimeUpdateJournal.MoveIntoPlace(stagingRoot, installRoot, backupRoot);
                 }, token);
-                runtimeCommitted = true;
                 SetProgress(88);
             }
             catch (Exception commitError)
             {
-                Log("Update activation was blocked. Restarting the previous runtime.");
+                Log("Windows blocked the runtime replacement.");
+                if (transaction is not null)
+                {
+                    await Task.Run(() => RestoreUpdate(transaction, installRoot, backupRoot), CancellationToken.None);
+                }
                 if (previousRuntimeExisted && HasValidRuntimePayload(installRoot))
                 {
                     try
                     {
                         LaunchCompanion(installRoot);
                         LaunchHotkeyHost(installRoot);
-                        await WaitForRuntimeServicesAsync(CancellationToken.None);
+                        await WaitForRuntimeServicesAsync(CancellationToken.None, UsesSecureIpc(installRoot));
                         Log("Previous runtime restarted successfully.");
                     }
                     catch (Exception recoveryError)
@@ -306,7 +309,9 @@ public sealed class SetupForm : Form
                 }
 
                 throw new InvalidOperationException(
-                    "Windows blocked the update, so the previous working runtime was restored and restarted.",
+                    previousRuntimeExisted
+                        ? "Windows blocked the update, so the previous runtime was restored. Close other Cursivis windows and retry."
+                        : "Windows blocked installation. Close other Cursivis windows and run Setup again.",
                     commitError);
             }
 
@@ -315,18 +320,13 @@ public sealed class SetupForm : Form
                 SetStatus("Step 5 of 5: Connecting Logitech triggers", "Preserving settings, refreshing startup entries, and launching Companion.");
                 var profilePath = WriteRuntimeProfile(installRoot);
                 Log("Runtime profile: " + profilePath);
-                RegisterStartup(installRoot);
                 LaunchCompanion(installRoot);
                 LaunchHotkeyHost(installRoot);
                 SetProgress(92);
                 SetStatus("Step 5 of 5: Verifying local services", "Checking the Companion backend and browser connections.");
                 await WaitForRuntimeServicesAsync(token);
                 Log("Companion backend and browser services are ready.");
-                var backupRemoved = await Task.Run(() => TryDeleteDirectory(backupRoot), CancellationToken.None);
-                if (!backupRemoved)
-                {
-                    Log("The previous runtime backup is still in use and will be cleaned up during a later update.");
-                }
+                RuntimeUpdateJournal.MarkActivated(backupRoot);
             }
             catch (Exception activationError)
             {
@@ -337,15 +337,14 @@ public sealed class SetupForm : Form
                 {
                     StopInstalledRuntimeProcesses(installRoot);
                     StopCursivisPortListeners(installRoot);
-                    RollbackRuntime(installRoot, backupRoot);
+                    RestoreUpdate(transaction!, installRoot, backupRoot);
                 }, CancellationToken.None);
-                runtimeCommitted = false;
 
                 if (previousRuntimeExisted && HasValidRuntimePayload(installRoot))
                 {
                     LaunchCompanion(installRoot);
                     LaunchHotkeyHost(installRoot);
-                    await WaitForRuntimeServicesAsync(CancellationToken.None);
+                    await WaitForRuntimeServicesAsync(CancellationToken.None, UsesSecureIpc(installRoot));
                     Log("Previous runtime restored successfully.");
                 }
 
@@ -355,26 +354,53 @@ public sealed class SetupForm : Form
                         : "Cursivis could not finish its first launch. No incomplete runtime was left installed. Please run Setup again.",
                     activationError);
             }
+
+            // Never register startup entries that point to a runtime that failed activation.
+            RegisterStartup(installRoot);
+            if (!await Task.Run(() => TryCleanBackup(backupRoot), CancellationToken.None))
+            {
+                Log("The previous runtime backup is still in use and will be cleaned up during a later update.");
+            }
         }
         finally
         {
             await Task.Run(() =>
             {
                 _ = TryDeleteDirectory(stagingRoot);
-                if (!runtimeCommitted)
-                {
-                    _ = TryDeleteDirectory(backupRoot);
-                }
-
                 _ = TryDeleteDirectory(tempRoot);
             }, CancellationToken.None);
         }
     }
 
+    private async Task AcquireRuntimeAsync(string destination, CancellationToken token)
+    {
+        if (RuntimeZipSha256.Length != 64 || RuntimeZipSha256.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new InvalidOperationException("This setup build is missing a valid runtime integrity fingerprint.");
+        }
+
+        var localArchive = Path.Combine(AppContext.BaseDirectory, Path.GetFileName(destination));
+        if (!File.Exists(localArchive))
+        {
+            SetStatus("Step 1 of 5: Downloading Companion runtime", "Downloading the Cursivis Companion package from GitHub Releases.");
+            await DownloadFileAsync(RuntimeZipUrl, destination, RuntimeZipSha256, token);
+            return;
+        }
+
+        SetStatus("Step 1 of 5: Verifying Companion runtime", "Checking the runtime archive next to Setup.");
+        await using (var source = File.OpenRead(localArchive))
+        await using (var target = File.Create(destination))
+        {
+            await source.CopyToAsync(target, token);
+        }
+        await VerifySha256Async(destination, RuntimeZipSha256, token);
+        Log($"Verified local {Path.GetFileName(destination)}.");
+    }
+
     private async Task DownloadFileAsync(
         string url,
         string destination,
-        string? expectedSha256,
+        string expectedSha256,
         CancellationToken token)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -389,9 +415,12 @@ public sealed class SetupForm : Form
             try
             {
                 File.Delete(partialPath);
-                using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+                using var attemptTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                attemptTimeout.CancelAfter(TimeSpan.FromMinutes(10));
+                var attemptToken = attemptTimeout.Token;
+                using var http = new HttpClient();
                 http.DefaultRequestHeaders.UserAgent.ParseAdd($"Cursivis-Companion-Setup/{DisplayVersion}");
-                using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+                using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, attemptToken);
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException(
@@ -403,7 +432,7 @@ public sealed class SetupForm : Form
                 var total = response.Content.Headers.ContentLength;
                 long readTotal = 0;
                 {
-                    await using var source = await response.Content.ReadAsStreamAsync(token);
+                    await using var source = await response.Content.ReadAsStreamAsync(attemptToken);
                     await using var target = File.Create(partialPath);
 
                     var buffer = new byte[1024 * 128];
@@ -411,9 +440,9 @@ public sealed class SetupForm : Form
                     progressBar.Style = total.HasValue ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
                     BeginInvoke(() => progressBar.Value = 0);
 
-                    while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), token)) > 0)
+                    while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), attemptToken)) > 0)
                     {
-                        await target.WriteAsync(buffer.AsMemory(0, read), token);
+                        await target.WriteAsync(buffer.AsMemory(0, read), attemptToken);
                         readTotal += read;
                         if (total.HasValue && total.Value > 0)
                         {
@@ -422,7 +451,7 @@ public sealed class SetupForm : Form
                         }
                     }
 
-                    await target.FlushAsync(token);
+                    await target.FlushAsync(attemptToken);
                 }
 
                 if (total.HasValue && readTotal != total.Value)
@@ -430,16 +459,13 @@ public sealed class SetupForm : Form
                     throw new InvalidDataException($"The download was incomplete ({readTotal} of {total.Value} bytes).");
                 }
 
-                if (!string.IsNullOrWhiteSpace(expectedSha256))
-                {
-                    VerifySha256(partialPath, expectedSha256);
-                }
+                await VerifySha256Async(partialPath, expectedSha256, attemptToken);
 
                 File.Move(partialPath, destination, overwrite: true);
                 Log($"Downloaded {Path.GetFileName(destination)}.");
                 return;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 File.Delete(partialPath);
                 throw;
@@ -516,17 +542,10 @@ public sealed class SetupForm : Form
         return Math.Max(104, textWidth + 36);
     }
 
-    private static void VerifySha256(string path, string expectedSha256)
+    private static async Task VerifySha256Async(string path, string expectedSha256, CancellationToken token)
     {
-        if (expectedSha256.Length != 64 ||
-            expectedSha256.Any(character => !Uri.IsHexDigit(character)))
-        {
-            throw new InvalidOperationException(
-                "This setup build is missing a valid runtime integrity fingerprint.");
-        }
-
         using var stream = File.OpenRead(path);
-        var actualSha256 = Convert.ToHexString(SHA256.HashData(stream));
+        var actualSha256 = Convert.ToHexString(await SHA256.HashDataAsync(stream, token));
         if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -536,13 +555,20 @@ public sealed class SetupForm : Form
 
     private static void CopyDirectory(string source, string destination)
     {
+        RuntimeUpdateJournal.RejectReparsePoint(source);
+        RuntimeUpdateJournal.RejectReparsePoint(destination);
         Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", options))
         {
             Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
         }
 
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(source, "*", options))
         {
             var target = Path.Combine(destination, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -550,7 +576,7 @@ public sealed class SetupForm : Form
         }
     }
 
-    private static void ValidateRuntimePayload(string payloadRoot)
+    private static void ValidateRuntimePayload(string payloadRoot, bool requireSecureIpc = false)
     {
         var requiredFiles = new[]
         {
@@ -564,6 +590,14 @@ public sealed class SetupForm : Form
             Path.Combine("desktop", "browser-native-host", "src", "host.js"),
             Path.Combine("shared", "ipc-protocol", "schema", "agent-request.schema.json")
         };
+        if (requireSecureIpc)
+        {
+            requiredFiles = [
+                ..requiredFiles,
+                Path.Combine("app", "browser-native-host", "Cursivis.BrowserNativeHost.exe"),
+                Path.Combine("shared", "local-ipc", "local-service-auth.cjs")
+            ];
+        }
 
         var missing = requiredFiles
             .Where(relativePath => !File.Exists(Path.Combine(payloadRoot, relativePath)))
@@ -589,31 +623,62 @@ public sealed class SetupForm : Form
         }
     }
 
-    private void RecoverInterruptedUpdate(string installRoot, string stagingRoot, string backupRoot)
+    private void RecoverInterruptedUpdates(string programsRoot, string installRoot)
     {
-        if (!TryDeleteDirectory(stagingRoot))
-        {
-            Log("A stale staging folder is still in use and will be cleaned up during a later update.");
-        }
-        if (!Directory.Exists(backupRoot))
+        if (!Directory.Exists(programsRoot))
         {
             return;
         }
 
-        if (HasValidRuntimePayload(installRoot))
+        var pending = new List<(string Path, RuntimeUpdateJournal Journal)>();
+        foreach (var path in Directory.EnumerateDirectories(programsRoot, "Cursivis.*"))
         {
-            Log("Removing stale update backup after a previously completed install.");
-            if (!TryDeleteDirectory(backupRoot))
+            var match = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(path),
+                @"^Cursivis\.(backup|staging)\.\d+_\d+_\d+(?:\.\d{14}\.[0-9a-f]{32})?$");
+            if (!match.Success)
             {
-                Log("The stale backup is still in use. This update will use its own isolated backup folder.");
+                continue;
             }
-            return;
+            if (match.Groups[1].Value == "staging")
+            {
+                if (!TryDeleteDirectory(path))
+                {
+                    Log("A stale staging folder is still in use and was kept.");
+                }
+                continue;
+            }
+            RuntimeUpdateJournal.RejectReparsePoint(path);
+            if (RuntimeUpdateJournal.WasActivated(path))
+            {
+                _ = TryCleanBackup(path);
+            }
+            else if (RuntimeUpdateJournal.Read(path) is { } plan)
+            {
+                pending.Add((path, plan));
+            }
+            else
+            {
+                // Older Setup versions did not record which original directories had moved.
+                Log("Keeping a previous Setup backup that does not have a recovery record: " + path);
+            }
         }
 
-        Log("Recovering the previous runtime from an interrupted update.");
-        StopInstalledRuntimeProcesses(installRoot);
-        StopCursivisPortListeners(installRoot);
-        RollbackRuntime(installRoot, backupRoot);
+        if (pending.Count > 1)
+        {
+            throw new InvalidOperationException("Setup found multiple interrupted updates. The backups were kept. Please contact Cursivis support.");
+        }
+        if (pending.Count == 1)
+        {
+            Log("Recovering the previous runtime from an interrupted update.");
+            StopInstalledRuntimeProcesses(installRoot);
+            StopCursivisPortListeners(installRoot);
+            RestoreUpdate(pending[0].Journal, installRoot, pending[0].Path);
+            if (HasValidRuntimePayload(installRoot))
+            {
+                LaunchCompanion(installRoot);
+                LaunchHotkeyHost(installRoot);
+            }
+        }
     }
 
     private static void PreserveMutableRuntimeData(string installRoot, string stagingRoot)
@@ -637,68 +702,35 @@ public sealed class SetupForm : Form
         }
     }
 
-    private static void CommitStagedRuntime(string stagingRoot, string installRoot, string backupRoot)
+    private void RestoreUpdate(RuntimeUpdateJournal journal, string installRoot, string backupRoot)
     {
-        Directory.CreateDirectory(installRoot);
-        Directory.CreateDirectory(backupRoot);
-        var movedNewDirectories = new List<string>();
-        var movedOldDirectories = new List<string>();
-
         try
         {
-            foreach (var name in RuntimePayloadDirectories)
-            {
-                var staged = RequireChildPath(stagingRoot, name);
-                var installed = RequireChildPath(installRoot, name);
-                var backup = RequireChildPath(backupRoot, name);
-                if (!Directory.Exists(staged))
-                {
-                    throw new InvalidDataException($"The staged runtime is missing '{name}'.");
-                }
-
-                if (Directory.Exists(installed))
-                {
-                    Directory.Move(installed, backup);
-                    movedOldDirectories.Add(name);
-                }
-
-                Directory.Move(staged, installed);
-                movedNewDirectories.Add(name);
-            }
+            journal.RestoreDirectories(installRoot, backupRoot,
+                path => DeleteDirectoryOrThrow(path, "incomplete runtime files"));
+            RestoreProtectedProfile(journal.ProtectedProfile);
+            RuntimeUpdateJournal.MarkActivated(backupRoot);
         }
-        catch
+        catch (Exception error)
         {
-            foreach (var name in movedNewDirectories.AsEnumerable().Reverse())
-            {
-                DeleteDirectoryOrThrow(RequireChildPath(installRoot, name), "partially activated runtime files");
-            }
-
-            foreach (var name in movedOldDirectories.AsEnumerable().Reverse())
-            {
-                var backup = RequireChildPath(backupRoot, name);
-                var installed = RequireChildPath(installRoot, name);
-                if (Directory.Exists(backup))
-                {
-                    Directory.Move(backup, installed);
-                }
-            }
-
-            throw;
+            throw new InvalidOperationException(
+                "Setup could not finish restoring the previous runtime. Its backup was kept. Close Cursivis and try Setup again.", error);
         }
+        _ = TryCleanBackup(backupRoot);
     }
 
-    private static void RollbackRuntime(string installRoot, string backupRoot)
+    private static bool TryCleanBackup(string backupRoot)
     {
-        foreach (var name in RuntimePayloadDirectories)
+        RuntimeUpdateJournal.RejectReparsePoint(backupRoot);
+        // Retain the completion marker until all previous payload directories are gone.
+        foreach (var name in RuntimeUpdateJournal.PayloadDirectories)
         {
-            var installed = RequireChildPath(installRoot, name);
-            var backup = RequireChildPath(backupRoot, name);
-            DeleteDirectoryOrThrow(installed, "runtime files being restored");
-            if (Directory.Exists(backup))
+            if (!TryDeleteDirectory(RequireChildPath(backupRoot, name)))
             {
-                Directory.Move(backup, installed);
+                return false;
             }
         }
+        return TryDeleteDirectory(backupRoot);
     }
 
     private static bool HasValidRuntimePayload(string root)
@@ -758,6 +790,7 @@ public sealed class SetupForm : Form
         {
             try
             {
+                RuntimeUpdateJournal.RejectReparsePoint(path);
                 ClearReadOnlyAttributes(path);
                 Directory.Delete(path, recursive: true);
                 return !Directory.Exists(path);
@@ -770,6 +803,10 @@ public sealed class SetupForm : Form
             {
                 Thread.Sleep(TimeSpan.FromMilliseconds(250 * (attempt + 1)));
             }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
         }
 
         return !Directory.Exists(path);
@@ -779,11 +816,20 @@ public sealed class SetupForm : Form
     {
         try
         {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories).Append(root))
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            };
+            foreach (var entry in Directory.EnumerateFileSystemEntries(root, "*", options).Append(root))
             {
                 try
                 {
-                    File.SetAttributes(entry, FileAttributes.Normal);
+                    var attributes = File.GetAttributes(entry);
+                    if ((attributes & FileAttributes.ReadOnly) != 0)
+                    {
+                        File.SetAttributes(entry, attributes & ~FileAttributes.ReadOnly);
+                    }
                 }
                 catch (IOException)
                 {
@@ -869,7 +915,7 @@ public sealed class SetupForm : Form
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "netstat",
+                FileName = Path.Combine(Environment.SystemDirectory, "netstat.exe"),
                 Arguments = "-ano -p TCP",
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -977,7 +1023,7 @@ public sealed class SetupForm : Form
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
                 Arguments =
                     $"-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_Process -Filter 'ProcessId = {processId}').CommandLine\"",
                 UseShellExecute = false,
@@ -1002,30 +1048,59 @@ public sealed class SetupForm : Form
         }
     }
 
-    private async Task WaitForRuntimeServicesAsync(CancellationToken token)
+    private static bool UsesSecureIpc(string installRoot) =>
+        File.Exists(Path.Combine(installRoot, "shared", "local-ipc", "local-service-auth.cjs"));
+
+    private async Task WaitForRuntimeServicesAsync(CancellationToken token, bool requireAuthenticatedServices = true)
     {
-        var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var profilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Cursivis", "runtime-profile.json");
+        using var profile = TryReadJson(profilePath);
+        var backendAddress = profile?.RootElement.TryGetProperty("backendUrl", out var backend) == true &&
+            backend.ValueKind == JsonValueKind.String ? backend.GetString() : null;
+        if (!Uri.TryCreate(backendAddress, UriKind.Absolute, out var backendUri))
         {
-            "http://127.0.0.1:51880/health",
-            "http://127.0.0.1:48820/health",
-            "http://127.0.0.1:48830/health"
+            backendUri = new Uri("http://127.0.0.1:51880");
+        }
+        var pending = new Dictionary<string, (Uri Endpoint, string Scope)>(StringComparer.Ordinal)
+        {
+            ["the AI service"] = (new Uri(backendUri, "/health"), LocalIpc.Backend),
+            ["the browser action service"] = (new Uri("http://127.0.0.1:48820/health"), LocalIpc.BrowserAgent),
+            ["the browser connection service"] = (new Uri("http://127.0.0.1:48830/health"), LocalIpc.BrowserBridge)
         };
+        if (requireAuthenticatedServices)
+        {
+            pending.Add("the Logitech trigger channel", (new Uri("ws://127.0.0.1:48711/cursivis-trigger/"), LocalIpc.Trigger));
+            pending.Add("the haptic channel", (new Uri("ws://127.0.0.1:48712/cursivis-haptics/"), LocalIpc.Haptics));
+        }
         var startedAt = DateTime.UtcNow;
         var deadline = startedAt + TimeSpan.FromMinutes(3);
         var nextProgressLog = startedAt + TimeSpan.FromSeconds(45);
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
         while (pending.Count > 0 && DateTime.UtcNow < deadline)
         {
             token.ThrowIfCancellationRequested();
-            foreach (var endpoint in pending.ToArray())
+            foreach (var (name, (uri, scope)) in pending.ToArray())
             {
                 try
                 {
-                    using var response = await http.GetAsync(endpoint, token);
+                    if (uri.Scheme == "ws")
+                    {
+                        using var socket = new ClientWebSocket();
+                        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        timeout.CancelAfter(TimeSpan.FromSeconds(2));
+                        await LocalIpc.ConnectAsync(socket, uri, scope, timeout.Token);
+                        pending.Remove(name);
+                        continue;
+                    }
+                    using var http = requireAuthenticatedServices
+                        ? LocalIpc.CreateHttpClient(uri, scope, TimeSpan.FromSeconds(3))
+                        : new HttpClient(new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false })
+                            { Timeout = TimeSpan.FromSeconds(3) };
+                    using var response = await http.GetAsync(uri, token);
                     if (response.IsSuccessStatusCode)
                     {
-                        pending.Remove(endpoint);
+                        pending.Remove(name);
                     }
                 }
                 catch when (!token.IsCancellationRequested)
@@ -1038,7 +1113,7 @@ public sealed class SetupForm : Form
             {
                 if (DateTime.UtcNow >= nextProgressLog)
                 {
-                    var pendingServices = string.Join(", ", pending.Select(DescribeRuntimeService));
+                    var pendingServices = string.Join(", ", pending.Keys);
                     Log($"Still waiting for local services: {pendingServices}.");
                     SetStatus(
                         "Step 5 of 5: Finishing first launch",
@@ -1053,31 +1128,56 @@ public sealed class SetupForm : Form
 
         if (pending.Count > 0)
         {
-            var pendingServices = string.Join(", ", pending.Select(DescribeRuntimeService));
+            var pendingServices = string.Join(", ", pending.Keys);
             throw new InvalidOperationException(
                 $"Cursivis installed, but {pendingServices} did not start. " +
                 "Restart Windows and run Setup again if the issue continues.");
         }
     }
 
-    private static string DescribeRuntimeService(string endpoint)
+    private static string RuntimeProfilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cursivis", "runtime-profile.json");
+
+    private static byte[]? CaptureProtectedProfile()
     {
-        return endpoint switch
+        RuntimeUpdateJournal.RejectReparsePoint(RuntimeProfilePath);
+        if (!File.Exists(RuntimeProfilePath))
         {
-            "http://127.0.0.1:51880/health" => "the AI service",
-            "http://127.0.0.1:48820/health" => "the browser action service",
-            "http://127.0.0.1:48830/health" => "the browser connection service",
-            _ => "a local service"
-        };
+            return null;
+        }
+        var bytes = File.ReadAllBytes(RuntimeProfilePath);
+        try
+        {
+            return ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
+    }
+
+    private static void RestoreProtectedProfile(byte[]? protectedProfile)
+    {
+        RuntimeUpdateJournal.RejectReparsePoint(RuntimeProfilePath);
+        if (protectedProfile is null)
+        {
+            File.Delete(RuntimeProfilePath);
+            return;
+        }
+        var bytes = ProtectedData.Unprotect(protectedProfile, null, DataProtectionScope.CurrentUser);
+        try
+        {
+            WriteRuntimeProfileBytes(bytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
     }
 
     private static string WriteRuntimeProfile(string root)
     {
-        var profileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cursivis");
-        var profilePath = Path.Combine(profileDir, "runtime-profile.json");
-        Directory.CreateDirectory(profileDir);
-
-        using var existing = TryReadJson(profilePath);
+        using var existing = TryReadJson(RuntimeProfilePath);
 
         string ExistingString(string name, string fallback)
         {
@@ -1133,22 +1233,56 @@ public sealed class SetupForm : Form
             ["extensionBridgeUrl"] = "http://127.0.0.1:48830",
             ["aiProvider"] = ExistingString("aiProvider", "gemini"),
             ["openAiBaseUrl"] = ExistingString("openAiBaseUrl", "https://api.openai.com/v1"),
-            ["openAiApiKey"] = ExistingString("openAiApiKey", ""),
+            ["openAiApiKey"] = ProtectExistingSecret(ExistingString("openAiApiKey", "")),
             ["openAiModel"] = ExistingString("openAiModel", "gpt-4.1-mini"),
             ["hostedApiUrl"] = ExistingString("hostedApiUrl", ""),
-            ["hostedToken"] = ExistingString("hostedToken", ""),
+            ["hostedToken"] = ProtectExistingSecret(ExistingString("hostedToken", "")),
             ["ollamaUrl"] = ExistingString("ollamaUrl", "http://127.0.0.1:11434"),
             ["localModel"] = ExistingString("localModel", "granite3.2-vision:2b"),
-            ["apiKey"] = ExistingString("apiKey", ""),
-            ["apiKeys"] = ExistingString("apiKeys", ""),
+            ["apiKey"] = ProtectExistingSecret(ExistingString("apiKey", "")),
+            ["apiKeys"] = ProtectExistingSecret(ExistingString("apiKeys", "")),
             ["enableStreamingTranscription"] = ExistingValue("enableStreamingTranscription", false),
             ["enableAutoReplace"] = ExistingValue("enableAutoReplace", false),
             ["autoReplaceConfidence"] = ExistingValue("autoReplaceConfidence", 0.9),
             ["enableManagedBrowserFallback"] = ExistingValue("enableManagedBrowserFallback", false)
         };
 
-        File.WriteAllText(profilePath, JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true }));
-        return profilePath;
+        WriteRuntimeProfileBytes(JsonSerializer.SerializeToUtf8Bytes(profile, new JsonSerializerOptions { WriteIndented = true }));
+        return RuntimeProfilePath;
+    }
+
+    private static void WriteRuntimeProfileBytes(byte[] bytes)
+    {
+        var path = RuntimeProfilePath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var staged = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(staged, bytes);
+            File.Move(staged, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(staged);
+        }
+    }
+
+    private static string ProtectExistingSecret(string value)
+    {
+        const string prefix = "dpapi:v1:";
+        if (value.Length == 0 || value.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return value;
+        }
+        var bytes = Encoding.UTF8.GetBytes(value);
+        try
+        {
+            return prefix + Convert.ToBase64String(ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
     }
 
     private static JsonDocument? TryReadJson(string path)

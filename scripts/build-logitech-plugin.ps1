@@ -1,9 +1,13 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [string]$Version = "1_5_3",
+    [ValidatePattern('^\d+_\d+_\d+$')]
+    [string]$Version = "1_5_4",
     [switch]$SkipBuild,
-    [switch]$InstallPackage
+    [switch]$InstallPackage,
+    [switch]$CandidateOnly,
+    [string]$LogiPluginToolPath,
+    [string]$LogiPluginInstallerPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,13 +34,39 @@ $pluginRoot = Join-Path $root "plugin\logitech-plugin\src\CursivisPlugin"
 $pluginProject = Join-Path $pluginRoot "src\CursivisPlugin.csproj"
 $buildOutputDir = Join-Path $pluginRoot "bin\$Configuration"
 $distDir = Join-Path $root "plugin\logitech-plugin\dist"
-$packagePath = Join-Path $distDir "Cursivis.lplug4"
 $artifactDir = Join-Path $root "artifacts\logitech-marketplace"
 $artifactPath = Join-Path $artifactDir "Cursivis_$Version.lplug4"
+$packagePath = if ($CandidateOnly) { $artifactPath } else { Join-Path $distDir "Cursivis.lplug4" }
 $pluginApiPath = Join-Path ${env:ProgramFiles} "Logi\LogiPluginService\PluginApi.dll"
 $pluginLinkPath = Join-Path $env:LOCALAPPDATA "Logi\LogiPluginService\Plugins\CursivisPlugin.link"
 $pluginLogPath = Join-Path $env:LOCALAPPDATA "Logi\LogiPluginService\Logs\plugin_logs\Cursivis.log"
-$toolPath = Join-Path $env:USERPROFILE ".dotnet\tools\logiplugintool.exe"
+$toolPath = $LogiPluginToolPath
+if ([string]::IsNullOrWhiteSpace($toolPath)) {
+    $toolPath = (Get-Command logiplugintool.exe -CommandType Application -ErrorAction SilentlyContinue).Source
+    if (-not $toolPath) {
+        $toolPath = Join-Path $env:USERPROFILE ".dotnet\tools\logiplugintool.exe"
+    }
+}
+
+function Invoke-LogiPluginTool {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+        [string]$ExpectedLine,
+        [string]$Executable = $toolPath
+    )
+
+    $output = @(& $Executable @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Host $_ }
+    $lines = @($output | ForEach-Object { $_.ToString().Trim() })
+
+    # Some Logitech tool failures are printed even though the process returns zero.
+    if ($exitCode -ne 0 -or ($lines -match '^(ERROR:|Operation failed\b)') -or
+        ($ExpectedLine -and $lines -notcontains $ExpectedLine)) {
+        throw "LogiPluginTool $($Arguments[0]) did not report success (exit $exitCode). For installation, use a tool compatible with the installed Logi Plugin Service."
+    }
+}
 
 function Assert-UniversalPluginContract {
     $pluginSource = Get-Content -LiteralPath (Join-Path $pluginRoot "src\CursivisPlugin.cs") -Raw
@@ -130,6 +160,23 @@ function Assert-InternalActionsAbsentFromPackage {
     }
 }
 
+function Assert-PackagedHapticsCapability {
+    param([Parameter(Mandatory = $true)][string]$Package)
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Package))
+    try {
+        $entry = $archive.GetEntry("metadata/LoupedeckPackage.yaml")
+        if (-not $entry) { throw "The package is missing LoupedeckPackage.yaml." }
+        $reader = [System.IO.StreamReader]::new($entry.Open())
+        try { $metadata = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        if ($metadata -notmatch '(?m)^\s*-\s*HasHapticsMapping\s*$' -or
+            $metadata -match '(?m)^\s*-\s*HasHapticMapping\s*$') {
+            throw "Packaged metadata did not preserve HasHapticsMapping without the legacy HasHapticMapping alias. Select a compatible packer with -LogiPluginToolPath and, if needed, a separate installer with -LogiPluginInstallerPath."
+        }
+    }
+    finally { $archive.Dispose() }
+}
+
 Write-Host "Preparing Logitech plugin build..."
 Write-Host "Plugin project: $pluginProject"
 
@@ -139,8 +186,17 @@ if (-not (Test-Path $pluginApiPath)) {
     throw "Logi Plugin Service SDK runtime was not found at '$pluginApiPath'. Install Logi Options+ before building the real plugin."
 }
 
-if (-not (Test-Path $toolPath)) {
+if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
     throw "LogiPluginTool was not found at '$toolPath'. Install the Logitech plugin tooling first."
+}
+$toolPath = (Resolve-Path -LiteralPath $toolPath).Path
+Write-Host "LogiPluginTool: $toolPath"
+$installerPath = $toolPath
+if ($InstallPackage -and $LogiPluginInstallerPath) {
+    if (-not (Test-Path -LiteralPath $LogiPluginInstallerPath -PathType Leaf)) {
+        throw "LogiPluginTool installer was not found at '$LogiPluginInstallerPath'."
+    }
+    $installerPath = (Resolve-Path -LiteralPath $LogiPluginInstallerPath).Path
 }
 
 if (-not $SkipBuild) {
@@ -155,7 +211,7 @@ if (-not $SkipBuild) {
     }
 
     Write-Host "Building Cursivis Logitech plugin ($Configuration)..."
-    dotnet build $pluginProject -c $Configuration
+    dotnet build $pluginProject -c $Configuration "-p:SkipLocalPluginRegistration=$([bool]$CandidateOnly)"
     if ($LASTEXITCODE -ne 0) {
         throw "Cursivis Logitech plugin build failed with exit code $LASTEXITCODE."
     }
@@ -173,32 +229,29 @@ if (Test-Path $packagePath) {
 }
 
 $packInput = Resolve-ShortPath -Path $buildOutputDir
-$packOutput = Join-Path (Resolve-ShortPath -Path $distDir) "Cursivis.lplug4"
+$packOutput = Join-Path (Resolve-ShortPath -Path (Split-Path -Parent $packagePath)) (Split-Path -Leaf $packagePath)
 
 Write-Host "Packing plugin from $buildOutputDir"
-& $toolPath pack $packInput $packOutput
-if ($LASTEXITCODE -ne 0) {
-    throw "LogiPluginTool pack failed with exit code $LASTEXITCODE."
-}
+Invoke-LogiPluginTool -Arguments @("pack", $packInput, $packOutput)
 
 Write-Host "Verifying plugin package..."
-& $toolPath verify $packOutput
-if ($LASTEXITCODE -ne 0) {
-    throw "LogiPluginTool verification failed with exit code $LASTEXITCODE."
-}
+Invoke-LogiPluginTool -Arguments @("verify", $packOutput)
 
 Assert-ForbiddenFilesAbsentFromPackage -Package $packOutput
 Assert-InternalActionsAbsentFromPackage -Package $packOutput
+Assert-PackagedHapticsCapability -Package $packOutput
 Write-Host "Confirmed: PluginApi.dll and debug symbols are absent from the final package."
 
-Copy-Item -LiteralPath $packOutput -Destination $artifactPath -Force
+if (-not $CandidateOnly) {
+    Copy-Item -LiteralPath $packOutput -Destination $artifactPath -Force
+}
 Assert-ForbiddenFilesAbsentFromPackage -Package $artifactPath
 Assert-InternalActionsAbsentFromPackage -Package $artifactPath
 Write-Host "Versioned marketplace artifact: $artifactPath"
 
 if ($InstallPackage) {
-    Write-Host "Installing package into Logi Plugin Service..."
-    & $toolPath install $packOutput
+    Write-Host "Installing package into Logi Plugin Service using $installerPath"
+    Invoke-LogiPluginTool -Arguments @("install", $packOutput) -ExpectedLine "Plugin was successfully installed" -Executable $installerPath
 }
 
 Write-Host ""

@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\cursivis-icon.png" />
+    <Compile Include="..\..\..\..\shared\local-ipc\LocalIpc.cs" Link="Security\LocalIpc.cs" />
+    <Compile Include="..\..\..\..\shared\local-ipc\BrowserNativeRegistration.cs" Link="Security\BrowserNativeRegistration.cs" />
+    <InternalsVisibleTo Include="Cursivis.Companion.Tests" />
   </ItemGroup>
 
 </Project>

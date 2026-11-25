@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Cursivis Browser Bridge",
   "description": "Lets Cursivis act in the real logged-in browser tab through DOM-aware automation.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "permissions": [
     "activeTab",
     "alarms",
@@ -13,9 +13,7 @@
     "webNavigation"
   ],
   "host_permissions": [
-    "<all_urls>",
-    "http://127.0.0.1/*",
-    "http://localhost/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js",

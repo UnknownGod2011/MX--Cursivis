@@ -1,6 +1,7 @@
 param(
-    [string]$Version = "1_5_3",
-    [string]$NodeVersion = "v22.22.0",
+    [ValidatePattern('^\d+_\d+_\d+$')]
+    [string]$Version = "1_5_4",
+    [string]$NodeVersion = "v22.23.5",
     [string]$NodeSourceDirectory = "",
     [switch]$SkipDotnetPublish,
     [switch]$SkipZip,
@@ -19,6 +20,7 @@ $zipPath = Join-Path $artifactRoot "CursivisRuntime_$Version.zip"
 $companionProject = Join-Path $root "desktop\cursivis-companion\src\Cursivis.Companion\Cursivis.Companion.csproj"
 $hotkeyProject = Join-Path $root "desktop\cursivis-hotkey-host\src\Cursivis.HotkeyHost\Cursivis.HotkeyHost.csproj"
 $triggerProject = Join-Path $root "desktop\cursivis-trigger-launcher\src\Cursivis.TriggerLauncher\Cursivis.TriggerLauncher.csproj"
+$nativeHostProject = Join-Path $root "desktop\cursivis-browser-native-host\src\Cursivis.BrowserNativeHost\Cursivis.BrowserNativeHost.csproj"
 $backendDir = Join-Path $root "backend\gemini-agent"
 $browserAgentDir = Join-Path $root "desktop\browser-action-agent"
 $browserExtensionDir = Join-Path $root "desktop\browser-extension-chromium"
@@ -223,12 +225,14 @@ function Assert-ReleaseRuntimeContents {
         "app\companion\Cursivis.Companion.exe",
         "app\hotkey-host\Cursivis.HotkeyHost.exe",
         "app\trigger-launcher\Cursivis.TriggerLauncher.exe",
+        "app\browser-native-host\Cursivis.BrowserNativeHost.exe",
         "node\node.exe",
         "backend\gemini-agent\src\server.js",
         "backend\gemini-agent\node_modules",
         "desktop\browser-action-agent\src\server.js",
         "desktop\browser-action-agent\node_modules",
-        "desktop\browser-native-host\src\host.js"
+        "desktop\browser-native-host\src\host.js",
+        "shared\local-ipc\local-service-auth.cjs"
     )
 
     $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $RuntimeDirectory $_)) })
@@ -254,7 +258,12 @@ Write-Host "Building Cursivis runtime package..."
 Write-Host "Output: $packageRoot"
 
 if (Test-Path -LiteralPath $packageRoot) {
-    Remove-Item -LiteralPath $packageRoot -Recurse -Force
+    $resolvedPackageRoot = (Resolve-Path -LiteralPath $packageRoot).Path
+    $resolvedArtifactRoot = (Resolve-Path -LiteralPath $artifactRoot).Path.TrimEnd('\') + '\'
+    if (-not $resolvedPackageRoot.StartsWith($resolvedArtifactRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to clean a package directory outside the artifacts directory."
+    }
+    Remove-Item -LiteralPath $resolvedPackageRoot -Recurse -Force
 }
 
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
@@ -275,6 +284,12 @@ if (-not $SkipDotnetPublish) {
         "--self-contained", "true", "-p:PublishSingleFile=true",
         "-p:EnableCompressionInSingleFile=true", "-p:DebugType=None",
         "-p:DebugSymbols=false", "-o", (Join-Path $runtimeRoot "app\trigger-launcher"))
+    Invoke-NativeCommand -FilePath "dotnet" -Arguments @(
+        "publish", $nativeHostProject, "-c", "Release", "-r", "win-x64",
+        "--self-contained", "true", "-p:PublishSingleFile=true",
+        "-p:IncludeNativeLibrariesForSelfExtract=true", "-p:EnableCompressionInSingleFile=true",
+        "-p:DebugType=None", "-p:DebugSymbols=false",
+        "-o", (Join-Path $runtimeRoot "app\browser-native-host"))
 }
 
 Copy-CleanDirectory -Source $backendDir -Destination (Join-Path $runtimeRoot "backend\gemini-agent") -Exclude @(
@@ -287,11 +302,16 @@ Copy-CleanDirectory -Source $backendDir -Destination (Join-Path $runtimeRoot "ba
 )
 Copy-CleanDirectory -Source $browserAgentDir -Destination (Join-Path $runtimeRoot "desktop\browser-action-agent") -Exclude @(
     "node_modules",
+    "data",
+    "tests",
     "README.md"
 )
 Copy-CleanDirectory -Source $browserExtensionDir -Destination (Join-Path $runtimeRoot "desktop\browser-extension-chromium")
-Copy-CleanDirectory -Source $extensionBridgeDir -Destination (Join-Path $runtimeRoot "desktop\browser-native-host")
-Copy-CleanDirectory -Source $sharedDir -Destination (Join-Path $runtimeRoot "shared")
+Copy-CleanDirectory -Source $extensionBridgeDir -Destination (Join-Path $runtimeRoot "desktop\browser-native-host") -Exclude @("launch.cmd", "README.md")
+Copy-CleanDirectory -Source (Join-Path $sharedDir "ipc-protocol") -Destination (Join-Path $runtimeRoot "shared\ipc-protocol")
+$localIpcDir = Join-Path $runtimeRoot "shared\local-ipc"
+New-Item -ItemType Directory -Path $localIpcDir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $sharedDir "local-ipc\local-service-auth.cjs") -Destination $localIpcDir
 
 $nodeSource = Resolve-PortableNodeSource -Version $NodeVersion -PreferredDirectory $NodeSourceDirectory
 Copy-CleanDirectory -Source $nodeSource -Destination (Join-Path $runtimeRoot "node")
@@ -304,9 +324,6 @@ Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Pat
 Install-ProductionDependencies -NodeExe $runtimeNode -ProjectDirectory (Join-Path $runtimeRoot "desktop\browser-action-agent")
 Remove-BuildTimeNodeTooling -NodeDirectory (Split-Path -Parent $runtimeNode)
 Assert-ReleaseRuntimeContents -RuntimeDirectory $runtimeRoot
-
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.ps1") -Destination $packageRoot -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install-cursivis-runtime.cmd") -Destination $packageRoot -Force
 
 if ($IncludePluginPackage -and -not $SkipPluginPackage) {
     if (-not (Test-Path -LiteralPath $pluginPackage)) {
@@ -331,8 +348,8 @@ if (Test-Path -LiteralPath $docsDir) {
 @"
 Cursivis Runtime Setup
 
-1. Extract this zip.
-2. Run install-cursivis-runtime.cmd.
+1. Keep this ZIP intact in the same folder as the matching CursivisCompanionSetup_$Version.exe.
+2. Run the Setup EXE. It verifies this archive and handles activation and rollback.
 3. Cursivis Companion opens automatically.
 4. Paste your Gemini API keys in API LLM mode, or choose Local LLM and click Download & Use.
 5. Add Cursivis Live Mode to Actions Ring for permission-aware voice control.

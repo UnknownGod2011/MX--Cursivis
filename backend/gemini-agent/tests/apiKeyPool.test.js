@@ -5,6 +5,7 @@ import {
   isRetriableGeminiRequestError,
   withGoogleGenAiClient
 } from "../src/apiKeyPool.js";
+import { generateWithFallbackModels } from "../src/geminiService.js";
 
 function clearApiKeyPoolState() {
   globalThis.__cursivisApiKeyPools?.clear?.();
@@ -247,4 +248,101 @@ test("gives a clear pool error when every configured key fails", async () => {
   );
 
   assert.deepEqual(attemptedKeys, ["bad-one", "bad-two"]);
+});
+
+test("an expired recovery budget makes no provider calls and leaves the whole key pool usable", async () => {
+  clearApiKeyPoolState();
+  process.env.GOOGLE_API_KEYS = "key-a,key-b,key-c";
+  const retryContext = { deadlineAt: Date.now() - 1 };
+  let calls = 0;
+
+  await assert.rejects(
+    () => withGoogleGenAiClient(
+      () => generateWithFallbackModels(
+        { models: { generateContent: async () => { calls += 1; } } },
+        { contents: "a synthetic image-intent request" },
+        ["primary", "fallback"],
+        false,
+        { retryContext, retryDelaysMs: [] }
+      ),
+      { canRetryError: isRetriableGeminiRequestError, retryContext }
+    ),
+    { code: "CURSIVIS_GEMINI_DEADLINE" }
+  );
+  assert.equal(calls, 0);
+  const next = [];
+  for (let i = 0; i < 3; i++) {
+    await withGoogleGenAiClient(async (_client, entry) => next.push(entry.index));
+  }
+  assert.deepEqual(next, [0, 1, 2]);
+});
+
+test("a request rotation skips a key another request cooled after the rotation started", async () => {
+  clearApiKeyPoolState();
+  process.env.GOOGLE_API_KEYS = "key-a,key-b,key-c";
+  const firstKey = Promise.withResolvers();
+  const tried = [];
+  const original = withGoogleGenAiClient(async (_client, entry) => {
+    tried.push(entry.index);
+    if (entry.index === 0) {
+      await firstKey.promise;
+      throw new Error("503 UNAVAILABLE");
+    }
+    return entry.index;
+  }, { canRetryError: isRetriableGeminiRequestError });
+  // The first call holds key zero; a concurrent call hits quota on key one.
+  try {
+    const concurrent = await withGoogleGenAiClient(async (_client, entry) => {
+      if (entry.index === 1) throw new Error("429 RESOURCE_EXHAUSTED: retry in 60s");
+      return entry.index;
+    });
+    assert.equal(concurrent, 2);
+  } finally {
+    firstKey.resolve();
+  }
+  assert.equal(await original, 2);
+  assert.deepEqual(tried, [0, 2]);
+});
+
+test("a late success cannot clear a cooldown imposed by a concurrent provider error", async () => {
+  clearApiKeyPoolState();
+  process.env.GOOGLE_API_KEYS = "shared-key";
+  const pending = Promise.withResolvers();
+  const successful = withGoogleGenAiClient(() => pending.promise);
+  try {
+    await assert.rejects(
+      withGoogleGenAiClient(async () => { throw new Error("429 RESOURCE_EXHAUSTED: retry in 60s"); }),
+      /quota-limited/
+    );
+  } finally {
+    pending.resolve("successful in-flight request");
+  }
+  await successful;
+  let calls = 0;
+  await assert.rejects(
+    withGoogleGenAiClient(async () => { calls += 1; }),
+    /cooling down/
+  );
+  assert.equal(calls, 0);
+});
+
+test("a later transient error cannot shorten an active quota cooldown or re-enable an invalid key", async () => {
+  for (const firstFailure of [
+    "429 RESOURCE_EXHAUSTED: retry in 60s",
+    "401 UNAUTHENTICATED: invalid API key"
+  ]) {
+    clearApiKeyPoolState();
+    process.env.GOOGLE_API_KEYS = "shared-key";
+    const pending = Promise.withResolvers();
+    const concurrent = withGoogleGenAiClient(
+      () => pending.promise, { canRetryError: isRetriableGeminiRequestError }
+    );
+    await assert.rejects(withGoogleGenAiClient(async () => { throw new Error(firstFailure); }));
+    pending.reject(new Error("503 UNAVAILABLE: retry in 1s"));
+    await assert.rejects(concurrent);
+    await assert.rejects(
+      withGoogleGenAiClient(async () => assert.fail("the key is still unavailable")),
+      firstFailure.startsWith("429") ? /RESOURCE_EXHAUSTED.*Retry in (60|59)s/ : /invalid, revoked/
+    );
+  }
 });

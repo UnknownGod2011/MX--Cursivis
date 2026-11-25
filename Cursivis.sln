@@ -41,6 +41,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{36182E2F
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cursivis.Companion.Tests", "desktop\cursivis-companion\tests\Cursivis.Companion.Tests\Cursivis.Companion.Tests.csproj", "{A386B954-9E44-4F40-8B99-563623E6813B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cursivis.BrowserNativeHost", "desktop\cursivis-browser-native-host\src\Cursivis.BrowserNativeHost\Cursivis.BrowserNativeHost.csproj", "{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,10 @@ Global
 		{A386B954-9E44-4F40-8B99-563623E6813B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A386B954-9E44-4F40-8B99-563623E6813B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A386B954-9E44-4F40-8B99-563623E6813B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F0B448E2-DC18-419C-8D77-872DF59B3115} = {7B042446-25BD-4A1F-BE25-EF7C422094F0}
@@ -93,5 +99,6 @@ Global
 		{77E8652B-F71F-4C52-BA81-812F171A6142} = {2604BE68-914E-41F4-B92C-780B74489068}
 		{36182E2F-3D22-43B7-B846-6869772B0340} = {F0B448E2-DC18-419C-8D77-872DF59B3115}
 		{A386B954-9E44-4F40-8B99-563623E6813B} = {36182E2F-3D22-43B7-B846-6869772B0340}
+		{F8169AF2-E8E3-4D9D-99B6-786D58E1ACE0} = {7B042446-25BD-4A1F-BE25-EF7C422094F0}
 	EndGlobalSection
 EndGlobal

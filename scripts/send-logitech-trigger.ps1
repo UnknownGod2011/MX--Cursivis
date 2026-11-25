@@ -7,13 +7,26 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "local-ipc.ps1")
 
 $socket = [System.Net.WebSockets.ClientWebSocket]::new()
 $uri = [Uri]$Endpoint
-$token = [System.Threading.CancellationToken]::None
+$timeout = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds(5))
+$token = $timeout.Token
+$key = Get-CursivisServiceKey trigger
 
 try {
+    if (-not $socket.Options.PSObject.Properties['CollectHttpResponseDetails']) {
+        throw 'Run the trigger diagnostic with PowerShell 7.4 or later.'
+    }
+    $proof = New-CursivisIpcProof $uri GET $key
+    $socket.Options.Proxy = [Net.WebProxy]::new()
+    $socket.Options.CollectHttpResponseDetails = $true
+    $socket.Options.SetRequestHeader('X-Cursivis-IPC', $proof)
     $socket.ConnectAsync($uri, $token).GetAwaiter().GetResult()
+    if ([string]($socket.HttpResponseHeaders['X-Cursivis-IPC-Ack'] | Select-Object -First 1) -cne (Get-CursivisIpcAck $key $proof)) {
+        throw 'Could not verify the Cursivis trigger channel.'
+    }
 
     $payload = [ordered]@{
         protocolVersion = "1.0.0"
@@ -39,9 +52,14 @@ try {
     Write-Host "Sent Logitech-style trigger:" $json
 }
 finally {
-    if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
-        $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "done", $token).GetAwaiter().GetResult()
+    try {
+        if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+            $socket.CloseOutputAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "done", $token).GetAwaiter().GetResult()
+        }
     }
-
-    $socket.Dispose()
+    finally {
+        $socket.Dispose()
+        $timeout.Dispose()
+        [Array]::Clear($key, 0, $key.Length)
+    }
 }

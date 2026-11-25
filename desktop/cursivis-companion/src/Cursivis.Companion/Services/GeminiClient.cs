@@ -1,4 +1,5 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -40,23 +41,14 @@ public sealed class GeminiClient : IDisposable
     private readonly HttpClient _localImageHttpClient;
     private readonly RuntimeLaunchProfileService _runtimeLaunchProfileService = new();
 
-    public GeminiClient()
+    public GeminiClient(string? configuredUrl = null)
     {
         var backendUrl = Environment.GetEnvironmentVariable("CURSIVIS_BACKEND_URL")
-            ?? "http://127.0.0.1:51880";
+            ?? configuredUrl ?? "http://127.0.0.1:51880";
         var backendUri = new Uri(backendUrl);
 
-        _httpClient = new HttpClient
-        {
-            BaseAddress = backendUri,
-            Timeout = TimeSpan.FromMinutes(4)
-        };
-
-        _localImageHttpClient = new HttpClient
-        {
-            BaseAddress = backendUri,
-            Timeout = ResolveLocalImageTimeout()
-        };
+        _httpClient = LocalIpc.CreateHttpClient(backendUri, LocalIpc.Backend, TimeSpan.FromMinutes(4));
+        _localImageHttpClient = LocalIpc.CreateHttpClient(backendUri, LocalIpc.Backend, ResolveLocalImageTimeout());
     }
 
     public async Task<AgentResponse> AnalyzeTextAsync(
@@ -461,13 +453,14 @@ public sealed class GeminiClient : IDisposable
                 "The AI request timed out. Try a shorter selection or retry in a few seconds.");
         }
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        using var received = response;
+        var body = await received.Content.ReadAsStringAsync(cancellationToken);
+        if (!received.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(FormatBackendError(response.StatusCode, body));
+            throw new InvalidOperationException(FormatBackendError(received.StatusCode, body));
         }
 
-        var parsed = await response.Content.ReadFromJsonAsync<AgentResponse>(cancellationToken: cancellationToken);
+        var parsed = JsonSerializer.Deserialize<AgentResponse>(body, JsonOptions);
         if (parsed is null || string.IsNullOrWhiteSpace(parsed.Result))
         {
             throw new InvalidOperationException("Backend returned an empty response payload.");
@@ -994,11 +987,11 @@ public sealed class GeminiClient : IDisposable
         return TimeSpan.FromMinutes(minutes);
     }
 
-    private static string FormatBackendError(HttpStatusCode statusCode, string responseBody)
+    internal static string FormatBackendError(HttpStatusCode statusCode, string responseBody)
     {
         try
         {
-            var parsed = JsonSerializer.Deserialize<BackendErrorResponse>(responseBody);
+            var parsed = JsonSerializer.Deserialize<BackendErrorResponse>(responseBody, JsonOptions);
             if (parsed is not null && !string.IsNullOrWhiteSpace(parsed.Error))
             {
                 var message = parsed.Error;

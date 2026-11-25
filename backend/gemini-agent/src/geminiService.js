@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
   buildIntentRouterPrompt,
   describeIntentRoutingConcern,
@@ -12,10 +13,10 @@ import {
   isModelAvailabilityError,
   isQuotaOrRateLimitError,
   isRetriableGeminiRequestError,
-  isTransientProviderError,
   withGoogleGenAiClient
 } from "./apiKeyPool.js";
 import { getGeminiErrorDiagnostics, traceGeminiEvent } from "./geminiDiagnostics.js";
+import { checkGeminiRequest, GeminiRequestStopped } from "./geminiRetryControl.js";
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 const DEFAULT_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"];
@@ -102,7 +103,9 @@ export function createGeminiTextGenerator({
 } = {}) {
   const cache = new Map();
 
-  return async ({ prompt, contents, useGrounding = false, modelOverride, config = {}, selectionType, action }) => {
+  return async ({ prompt, contents, useGrounding = false, modelOverride, config = {}, selectionType, action, signal }) => {
+    const retryContext = createRetryContext({ signal: combineSignals(signal, config.abortSignal) });
+    checkGeminiRequest(retryContext);
     if (!hasConfiguredApiKeys()) {
       throw new Error("GOOGLE_API_KEY or GOOGLE_API_KEYS is required to call Gemini.");
     }
@@ -136,7 +139,6 @@ export function createGeminiTextGenerator({
     }
 
     const candidateModels = buildModelCandidates(preferredModel);
-    const retryContext = createRetryContext();
     let response;
     let resolvedModel = preferredModel;
     try {
@@ -145,12 +147,12 @@ export function createGeminiTextGenerator({
           keyIndex: entry.index,
           retryContext
         }),
-        { canRetryError: isRetriableGeminiRequestError }
+        { canRetryError: isRetriableGeminiRequestError, retryContext }
       );
       response = generated.response;
       resolvedModel = generated.model;
     } catch (error) {
-      if (useGrounding) {
+      if (useGrounding && !(error instanceof GeminiRequestStopped)) {
         // Fallback gracefully if grounding tool is unavailable in the current API mode.
         const fallbackRequest = {
           ...request,
@@ -164,7 +166,7 @@ export function createGeminiTextGenerator({
             keyIndex: entry.index,
             retryContext
           }),
-          { canRetryError: isRetriableGeminiRequestError }
+          { canRetryError: isRetriableGeminiRequestError, retryContext }
         );
         response = generated.response;
         resolvedModel = generated.model;
@@ -517,8 +519,11 @@ export function createGeminiIntentRouter({
     imageMimeType = "image/png",
     mode = "smart",
     actionHint = "",
-    voiceCommand = ""
+    voiceCommand = "",
+    signal
   }) => {
+    const retryContext = createRetryContext({ signal });
+    checkGeminiRequest(retryContext);
     if (!hasConfiguredApiKeys()) {
       return fallbackIntentDecision({ selectionKind, text });
     }
@@ -539,7 +544,6 @@ export function createGeminiIntentRouter({
 
     try {
       const candidateModels = buildModelCandidates(model);
-      const retryContext = createRetryContext();
       const request = buildIntentRouterRequest({
         model,
         selectionKind,
@@ -559,7 +563,7 @@ export function createGeminiIntentRouter({
           false,
           { keyIndex: entry.index, retryContext }
         ),
-        { canRetryError: isRetriableGeminiRequestError }
+        { canRetryError: isRetriableGeminiRequestError, retryContext }
       );
 
       let parsed = parseJsonObject(response.text || "");
@@ -590,7 +594,7 @@ export function createGeminiIntentRouter({
               false,
               { keyIndex: entry.index, retryContext }
             ),
-            { canRetryError: isRetriableGeminiRequestError }
+            { canRetryError: isRetriableGeminiRequestError, retryContext }
           );
           const reparsed = parseJsonObject(rechecked.response.text || "");
           if (reparsed) {
@@ -599,6 +603,7 @@ export function createGeminiIntentRouter({
           }
         } catch {
           // Keep the original Gemini routing result if the self-check pass fails.
+          checkGeminiRequest({ signal });
         }
       }
 
@@ -641,9 +646,10 @@ export function createGeminiOptionGenerator({
     imageBase64 = "",
     imageMimeType = "image/png",
     contentType = "general_text",
-    currentOptions = []
+    currentOptions = [],
+    signal
   }) => {
-    if (!hasConfiguredApiKeys()) {
+    if (signal?.aborted || !hasConfiguredApiKeys()) {
       return [];
     }
 
@@ -733,7 +739,7 @@ export function createGeminiOptionGenerator({
               }
             };
 
-      const optionRetryContext = createRetryContext({ budgetMs: DEFAULT_OPTIONS_BUDGET_MS });
+      const optionRetryContext = createRetryContext({ budgetMs: DEFAULT_OPTIONS_BUDGET_MS, signal });
       const { response } = await withGoogleGenAiClient(
         (client, entry) => generateWithFallbackModels(
           client,
@@ -745,7 +751,7 @@ export function createGeminiOptionGenerator({
             retryContext: optionRetryContext
           }
         ),
-        { canRetryError: isRetriableGeminiRequestError }
+        { canRetryError: isRetriableGeminiRequestError, retryContext: optionRetryContext }
       );
       const parsed = parseJsonObject(response.text || "");
       const generated = parseActionListFromJson(parsed).filter((action) => !normalizedCurrent.includes(action)).slice(0, 10);
@@ -784,8 +790,10 @@ export async function generateWithFallbackModels(
   } = {}
 ) {
   let lastError = null;
+  const context = { ...retryContext, signal: combineSignals(retryContext.signal, request.config?.abortSignal) };
 
   for (let modelIndex = 0; modelIndex < candidateModels.length; modelIndex += 1) {
+    checkGeminiRequest(context);
     const candidateModel = candidateModels[modelIndex];
     if (modelIndex > 0) {
       traceGeminiEvent("model_fallback", {
@@ -796,20 +804,12 @@ export async function generateWithFallbackModels(
     }
 
     for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
-      const remainingMs = retryContext.deadlineAt - Date.now();
-      if (remainingMs <= 0) {
-        const timeoutError = new Error("504 TIMEOUT: Gemini recovery budget was exhausted.");
-        timeoutError.code = 504;
-        throw timeoutError;
-      }
-
+      const remainingMs = checkGeminiRequest(context);
       const startedAt = Date.now();
+      const attemptTimeoutMs = Math.min(resolveAttemptTimeoutMs(), remainingMs);
+      const attemptSignal = AbortSignal.timeout(attemptTimeoutMs);
+      const abortSignal = combineSignals(context.signal, attemptSignal);
       try {
-        const attemptTimeoutMs = Math.max(1000, Math.min(resolveAttemptTimeoutMs(), remainingMs));
-        const budgetSignal = AbortSignal.timeout(attemptTimeoutMs);
-        const abortSignal = request.config?.abortSignal
-          ? AbortSignal.any([request.config.abortSignal, budgetSignal])
-          : budgetSignal;
         const compatibleConfig = buildModelCompatibleConfig(request.config, candidateModel);
         const response = await client.models.generateContent({
           ...request,
@@ -827,6 +827,7 @@ export async function generateWithFallbackModels(
             }
           }
         });
+        checkGeminiRequest(context);
 
         traceGeminiAttempt({
           outcome: "success",
@@ -840,7 +841,17 @@ export async function generateWithFallbackModels(
           response,
           model: candidateModel
         };
-      } catch (error) {
+      } catch (failure) {
+        if (failure instanceof GeminiRequestStopped) {
+          throw failure;
+        }
+        checkGeminiRequest(context);
+        if (attemptSignal.aborted && attemptTimeoutMs === remainingMs) {
+          throw new GeminiRequestStopped("deadline");
+        }
+        const error = attemptSignal.aborted
+          ? Object.assign(new Error("Gemini attempt timed out.", { cause: failure }), { code: 504 })
+          : failure;
         lastError = error;
         const errorCategory = classifyGeminiError(error);
         const transient = errorCategory === "transient" || errorCategory === "transport_security";
@@ -860,9 +871,14 @@ export async function generateWithFallbackModels(
         }
 
         if (transient && attempt < retryDelaysMs.length) {
-          const backoffMs = Math.min(retryDelaysMs[attempt], Math.max(0, retryContext.deadlineAt - Date.now()));
+          const backoffMs = Math.min(retryDelaysMs[attempt], checkGeminiRequest(context));
           if (backoffMs > 0) {
-            await delay(backoffMs);
+            try {
+              await delay(backoffMs, undefined, { signal: context.signal });
+            } catch (error) {
+              checkGeminiRequest(context);
+              throw error;
+            }
           }
           continue;
         }
@@ -892,9 +908,10 @@ function buildModelCompatibleConfig(config = {}, model = "") {
   return compatible;
 }
 
-function createRetryContext({ budgetMs = resolveOperationBudgetMs() } = {}) {
+function createRetryContext({ budgetMs = resolveOperationBudgetMs(), signal } = {}) {
   return {
-    deadlineAt: Date.now() + Math.max(1000, budgetMs)
+    deadlineAt: Date.now() + budgetMs,
+    signal
   };
 }
 
@@ -908,11 +925,11 @@ function resolveAttemptTimeoutMs() {
 
 function readPositiveInteger(value, fallback) {
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback;
 }
 
-function delay(durationMs) {
-  return new Promise((resolve) => setTimeout(resolve, durationMs));
+function combineSignals(first, second) {
+  return first && second && first !== second ? AbortSignal.any([first, second]) : first || second;
 }
 
 function traceGeminiAttempt({ outcome, keyIndex, model, attempt, durationMs, error }) {

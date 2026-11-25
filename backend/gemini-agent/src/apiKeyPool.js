@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiErrorDiagnostics, traceGeminiEvent } from "./geminiDiagnostics.js";
+import { checkGeminiRequest, GeminiRequestStopped } from "./geminiRetryControl.js";
 
 const DEFAULT_QUOTA_COOLDOWN_MS = 2 * 60 * 1000;
 const DEFAULT_AUTH_COOLDOWN_MS = 15 * 60 * 1000;
@@ -24,7 +25,8 @@ export function hasConfiguredApiKeys() {
   return getConfiguredApiKeys().length > 0;
 }
 
-export async function withGoogleGenAiClient(executor, { canRetryError = isRetriableApiKeyError } = {}) {
+export async function withGoogleGenAiClient(executor, { canRetryError = isRetriableApiKeyError, retryContext } = {}) {
+  checkGeminiRequest(retryContext);
   const pool = getPool();
   if (pool.entries.length === 0) {
     throw new Error("No Gemini API keys are configured. Paste one or more API keys in Cursivis Settings to use API LLM mode.");
@@ -38,6 +40,11 @@ export async function withGoogleGenAiClient(executor, { canRetryError = isRetria
   let lastError = null;
 
   for (const entry of candidates) {
+    checkGeminiRequest(retryContext);
+    // Another in-flight request can change a key's health while we await an attempt.
+    if (!isEntryAvailable(entry, Date.now())) {
+      continue;
+    }
     entry.inFlight += 1;
     try {
       entry.lastUsedAt = Date.now();
@@ -46,6 +53,9 @@ export async function withGoogleGenAiClient(executor, { canRetryError = isRetria
       markEntrySuccess(entry);
       return result;
     } catch (error) {
+      if (error instanceof GeminiRequestStopped) {
+        throw error;
+      }
       lastError = error;
       if (canRetryError(error)) {
         const cooldownMs = markEntryFailure(entry, error);
@@ -82,10 +92,12 @@ export function markEntryFailure(entry, error) {
   const now = Date.now();
   entry.consecutiveFailures += 1;
   entry.lastFailureAt = now;
-  entry.failureCategory = failureCategory;
-  entry.disabled = failureCategory === "auth";
-  entry.cooldownUntil = entry.disabled ? Number.POSITIVE_INFINITY : now + cooldownMs;
-  return cooldownMs;
+  if (!entry.disabled && (failureCategory === "auth" || now + cooldownMs >= entry.cooldownUntil)) {
+    entry.failureCategory = failureCategory;
+    entry.disabled = failureCategory === "auth";
+    entry.cooldownUntil = entry.disabled ? Number.POSITIVE_INFINITY : now + cooldownMs;
+  }
+  return entry.disabled ? cooldownMs : entry.cooldownUntil - now;
 }
 
 export function isRetriableApiKeyError(error) {
@@ -224,8 +236,11 @@ function getPool() {
 }
 
 function markEntrySuccess(entry) {
-  entry.cooldownUntil = 0;
   entry.lastSuccessAt = Date.now();
+  if (!isEntryAvailable(entry, entry.lastSuccessAt)) {
+    return;
+  }
+  entry.cooldownUntil = 0;
   entry.consecutiveFailures = 0;
   entry.failureCategory = null;
   entry.disabled = false;
@@ -254,8 +269,12 @@ function getErrorMessage(error) {
 function getCandidateEntries(entries) {
   const now = Date.now();
   return entries
-    .filter((entry) => !entry.disabled && entry.cooldownUntil <= now)
+    .filter((entry) => isEntryAvailable(entry, now))
     .sort((left, right) => left.inFlight - right.inFlight || left.lastUsedAt - right.lastUsedAt);
+}
+
+function isEntryAvailable(entry, now) {
+  return !entry.disabled && entry.cooldownUntil <= now;
 }
 
 function createUnavailablePoolError(entries) {

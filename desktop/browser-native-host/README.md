@@ -1,5 +1,9 @@
 # Cursivis Browser Native Host
 
-This native messaging host is launched by the Chromium extension and exposes a local HTTP bridge for the companion app.
+Companion starts the local, authenticated browser bridge in `src/host.js`.
+Chromium launches `Cursivis.BrowserNativeHost.exe` over Native Messaging for
+the registered Cursivis extension. The extension has no local IPC credential.
 
-It does not need to be started manually. Once the browser extension is loaded and the manifest is registered, the browser launches this host automatically.
+Companion registers the extension shipped in the runtime automatically. To use
+an unpacked development copy, load it, copy its ID from the browser's extensions
+page, and use `scripts/install-browser-bridge.ps1 -ExtensionId <ID>`.

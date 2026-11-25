@@ -3,6 +3,7 @@ using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -2023,9 +2024,7 @@ public sealed class TriggerController : IDisposable
     {
         if (extensionUnavailableForCurrentTab)
         {
-            return managedBrowserFallbackEnabled
-                ? "The real current-tab browser bridge is not connected yet, so Cursivis is falling back to weaker browser automation. Reload the unpacked Cursivis extension, keep the browser open on your logged-in tab, then retry."
-                : "The real current-tab browser bridge is not connected yet. Cursivis is staying out of the managed Chrome fallback, so reload the unpacked Cursivis extension, keep the browser open on your logged-in tab, then retry.";
+            return BuildBrowserExtensionSetupHint();
         }
 
         if (usingExtensionBrowserSession)
@@ -2627,11 +2626,24 @@ public sealed class TriggerController : IDisposable
         if (IsExtensionUnavailable(extensionHealth))
         {
             lines.Add(string.Empty);
-            lines.Add("Current-tab bridge:");
-            lines.Add("The Chromium extension bridge is not connected, so Cursivis fell back to weaker browser automation. Reload the unpacked extension and keep your logged-in browser tab open for best Take Action reliability.");
+            lines.Add(BuildBrowserExtensionSetupHint());
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    internal static string BuildBrowserExtensionSetupHint(string? localAppData = null)
+    {
+        var extensionDirectory = Path.Combine(
+            localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs", "Cursivis", "desktop", "browser-extension-chromium");
+
+        return string.Join(Environment.NewLine,
+            "Cursivis Browser Bridge is not connected. The extension is included with Companion.",
+            "1. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.",
+            "2. Turn on **Developer mode** and choose **Load unpacked**.",
+            $"3. Select this folder: `{extensionDirectory}`",
+            "4. Refresh the target tab and retry Take Action. If already loaded, click **Reload** first.");
     }
 
     private static bool IsExtensionUnavailable(ExtensionBridgeHealthResponse? extensionHealth)

@@ -1,6 +1,7 @@
 param(
-    [string]$Version = "1_5_3",
-    [string]$RuntimeUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisRuntime_1_5_3.zip",
+    [ValidatePattern('^\d+_\d+_\d+$')]
+    [string]$Version = "1_5_4",
+    [string]$RuntimeUrl,
     [switch]$AllowLocalRuntimeUrl
 )
 
@@ -8,9 +9,6 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "desktop\cursivis-setup\src\Cursivis.Setup\Cursivis.Setup.csproj"
-$publishDir = Join-Path $root "artifacts\qa-candidate\setup-publish"
-$outputDir = Join-Path $root "artifacts\qa-candidate"
-$outputPath = Join-Path $outputDir "CursivisCompanionSetup_${Version}.exe"
 $runtimeZip = Join-Path $root "artifacts\cursivis-runtime\CursivisRuntime_${Version}.zip"
 
 if (-not (Test-Path -LiteralPath $runtimeZip)) {
@@ -18,12 +16,15 @@ if (-not (Test-Path -LiteralPath $runtimeZip)) {
 }
 
 $runtimeSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $runtimeZip).Hash
+$normalizedVersion = $Version.Replace('_', '.')
+if ([string]::IsNullOrWhiteSpace($RuntimeUrl)) {
+    $RuntimeUrl = "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v$normalizedVersion/CursivisRuntime_$Version.zip"
+}
 $runtimeUri = $null
 if (-not [Uri]::TryCreate($RuntimeUrl, [UriKind]::Absolute, [ref]$runtimeUri)) {
     throw "RuntimeUrl must be an absolute URL."
 }
 
-$normalizedVersion = $Version.Replace('_', '.')
 $expectedReleasePath = "/UnknownGod2011/MX--Cursivis/releases/download/v$normalizedVersion/CursivisRuntime_$Version.zip"
 $isPinnedGitHubRelease =
     $runtimeUri.Scheme -eq "https" -and
@@ -37,6 +38,10 @@ $isAllowedLocalUrl =
 if (-not $isPinnedGitHubRelease -and -not $isAllowedLocalUrl) {
     throw "RuntimeUrl must be the version-pinned MX--Cursivis GitHub Releases asset. Loopback URLs require -AllowLocalRuntimeUrl."
 }
+
+$outputDir = Join-Path $root $(if ($isAllowedLocalUrl) { "artifacts\security-qa" } else { "artifacts\qa-candidate" })
+$publishDir = Join-Path $outputDir "setup-publish"
+$outputPath = Join-Path $outputDir "CursivisCompanionSetup_${Version}.exe"
 
 if (Test-Path -LiteralPath $publishDir) {
     $resolvedPublishDir = [System.IO.Path]::GetFullPath($publishDir)

@@ -1,3 +1,4 @@
+using Cursivis.Security;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +13,7 @@ Console.WriteLine("Connecting trigger channel: " + triggerEndpoint);
 using var triggerWs = new ClientWebSocket();
 try
 {
-    await triggerWs.ConnectAsync(new Uri(triggerEndpoint), CancellationToken.None);
+    await LocalIpc.ConnectAsync(triggerWs, new Uri(triggerEndpoint), LocalIpc.Trigger, CancellationToken.None);
 }
 catch (Exception ex)
 {
@@ -98,7 +99,7 @@ static async Task RunHapticLoopAsync(Uri endpoint, CancellationToken cancellatio
                 Console.WriteLine("Connecting haptic channel: " + endpoint);
             }
 
-            await socket.ConnectAsync(endpoint, cancellationToken);
+            await LocalIpc.ConnectAsync(socket, endpoint, LocalIpc.Haptics, cancellationToken);
             Console.WriteLine("Connected haptic channel.");
             announcedUnavailable = false;
             await ReceiveHapticsAsync(socket, cancellationToken);

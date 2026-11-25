@@ -43,6 +43,24 @@ The setup page gives you a single Windows Companion Setup download. Open it once
 
 Windows may ask you to confirm before running the setup file. Browsers do not allow websites to run installers silently, so that confirmation is expected.
 
+Use current Logi Options+ on Windows 10 or 11 (x64). The 1.5.4 Logitech
+plugin needs Logi Plugin Service 6.4 or later. Install matching 1.5.4 versions
+of the plugin and Companion; earlier components do not use the authenticated
+connection required by 1.5.4. The setup page links to the matching plugin
+package for users who do not yet see 1.5.4 in Options+. Saved settings and API
+keys stay with your Windows account. If actions do not appear after an update,
+use **Restart Logi Plugin Service** in Options+, then try the same binding.
+
+The Chromium extension is optional. To let Cursivis work with an already-open
+tab, enable Developer mode on your browser's Extensions page and choose
+**Load unpacked**. Select `%LOCALAPPDATA%\Programs\Cursivis\desktop\browser-extension-chromium`.
+Companion registers its native host automatically. No terminal commands or
+browser extension are required for ordinary selections, Talk, Snip, or Live Mode.
+
+For an offline install of 1.5.4, place the matching runtime ZIP next to the
+Setup EXE and run Setup. Do not extract it or run a PowerShell installer.
+Setup verifies the same pinned SHA-256 it uses for downloads.
+
 ## Product Preview
 
 <p align="center">
@@ -403,6 +421,10 @@ Steps:
    - [desktop/browser-extension-chromium](./desktop/browser-extension-chromium)
 5. Keep the extension enabled.
 6. Refresh the target tab once before using `Take Action`.
+
+For the unpacked source copy above, register its ID from the browser's extensions
+page with `scripts/install-browser-bridge.ps1 -ExtensionId <ID>`, then reload the
+extension. Companion registers the bundled installed copy automatically.
 
 This is what lets Cursivis work inside the browser tab you are already logged into.
 

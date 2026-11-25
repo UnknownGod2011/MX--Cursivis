@@ -1,21 +1,35 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.IO;
 using System.Net;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 namespace Cursivis.Companion.Services;
 
 public sealed class TriggerIpcServer : IDisposable
 {
+    private const int MaxMessageBytes = 4096;
+    private static readonly HashSet<string> PressTypes = new(StringComparer.Ordinal)
+    {
+        "tap", "action", "snip-it", "prompt_optimizer", "live_mode", "live_mode_stop", "settings",
+        "long_press", "long_press_start", "long_press_end", "dial_press", "dial_tick"
+    };
+
     private readonly HttpListener _listener = new();
+    private readonly LocalWebSocketAccess _access;
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptLoopTask;
 
     public TriggerIpcServer(string prefix = "http://127.0.0.1:48711/cursivis-trigger/")
+        : this(prefix, LocalIpc.GetServiceKey(LocalIpc.Trigger))
     {
+    }
+
+    internal TriggerIpcServer(string prefix, byte[] key)
+    {
+        _access = new LocalWebSocketAccess(new Uri(prefix), key);
         _listener.Prefixes.Add(prefix);
     }
 
@@ -75,10 +89,8 @@ public sealed class TriggerIpcServer : IDisposable
 
     private async Task HandleContextAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
-        if (!context.Request.IsWebSocketRequest)
+        if (!_access.TryAuthorize(context))
         {
-            context.Response.StatusCode = 400;
-            context.Response.Close();
             return;
         }
 
@@ -99,7 +111,8 @@ public sealed class TriggerIpcServer : IDisposable
             {
                 try
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "closing", CancellationToken.None);
+                    using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "closing", closeTimeout.Token);
                 }
                 catch
                 {
@@ -113,7 +126,7 @@ public sealed class TriggerIpcServer : IDisposable
 
     private async Task ReceiveLoopAsync(WebSocket socket, CancellationToken cancellationToken)
     {
-        var buffer = new byte[4096];
+        var buffer = new byte[MaxMessageBytes];
 
         while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
         {
@@ -128,22 +141,26 @@ public sealed class TriggerIpcServer : IDisposable
                     return;
                 }
 
+                if (result.MessageType != WebSocketMessageType.Text || ms.Length + result.Count > MaxMessageBytes)
+                {
+                    return;
+                }
+
                 ms.Write(buffer, 0, result.Count);
             }
             while (!result.EndOfMessage);
 
-            if (result.MessageType != WebSocketMessageType.Text)
+            var payload = JsonSerializer.Deserialize<TriggerEventPayload>(
+                ms.GetBuffer().AsSpan(0, (int)ms.Length), _jsonOptions);
+            if (payload is null || payload.ProtocolVersion != "1.0.0" || payload.EventType != "trigger" ||
+                payload.PressType?.Trim().ToLowerInvariant() is not { } pressType || !PressTypes.Contains(pressType) ||
+                payload.Source is not { Length: > 0 and <= 64 } source ||
+                !source.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))
             {
                 continue;
             }
 
-            var json = Encoding.UTF8.GetString(ms.ToArray());
-            var payload = JsonSerializer.Deserialize<TriggerEventPayload>(json, _jsonOptions);
-            if (payload is null)
-            {
-                continue;
-            }
-
+            payload.PressType = pressType;
             TriggerReceived?.Invoke(this, payload);
         }
     }

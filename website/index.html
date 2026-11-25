@@ -19,10 +19,10 @@
             <img src="/cursivis-icon.png" alt="" class="brand-icon" />
             <div>
               <span>Cursivis</span>
-              <small>Windows Companion | v1.5.3</small>
+              <small>Windows Companion | v1.5.4</small>
             </div>
           </div>
-          <p class="eyebrow">One quick install after Logitech Marketplace</p>
+          <p class="eyebrow">Windows setup for Logitech devices</p>
           <h1 id="title">Finish setup. Stay in your flow.</h1>
           <p>
             Cursivis brings intelligence to your cursor. Install Companion once,
@@ -32,10 +32,10 @@
           <div class="actions">
             <a
               class="primary-button"
-              href="https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisCompanionSetup_1_5_3.exe"
+              href="/downloads/CursivisCompanionSetup_1_5_4.exe"
               download
             >
-              Download for Windows
+              Download Companion for Windows
             </a>
             <a
               class="secondary-button"
@@ -49,9 +49,15 @@
           <div class="download-meta" aria-label="Download details">
             <span>Windows 10/11</span>
             <span>64-bit</span>
-            <span>68.3 MB</span>
+            <span>68 MB installer</span>
             <span>No Node or developer tools required</span>
           </div>
+          <p class="security-note">
+            Use this installer with <strong>Cursivis plugin 1.5.4</strong> and
+            current Logi Options+. If Options+ still shows an earlier version,
+            <a class="text-link" href="https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.4/Cursivis_1_5_4.lplug4">download the matching plugin</a>
+            and open the file to install it.
+          </p>
           <p class="security-note">
             Windows may show its normal security prompt before running a new
             installer. Companion installs for your Windows account, starts the
@@ -65,22 +71,22 @@
           <div class="step active">
             <span>1</span>
             <div>
-              <strong>Run Companion Setup</strong>
-              <p>Open the downloaded file and let setup finish.</p>
+              <strong>Install the matching plugin</strong>
+              <p>Check that Cursivis is version 1.5.4 in Logi Options+.</p>
             </div>
           </div>
           <div class="step">
             <span>2</span>
             <div>
-              <strong>Open Cursivis Settings</strong>
-              <p>Choose <b>API LLM (Recommended)</b>.</p>
+              <strong>Run Companion Setup</strong>
+              <p>Open the downloaded installer. It downloads and verifies the runtime.</p>
             </div>
           </div>
           <div class="step">
             <span>3</span>
             <div>
               <strong>Add your Gemini API key</strong>
-              <p>Paste one or more keys, save, then press Test.</p>
+              <p>In Settings, choose <b>API LLM</b>, paste your key, then press Test.</p>
             </div>
           </div>
           <div class="step">
@@ -154,9 +160,9 @@
           <article>
             <h3>Includes browser support</h3>
             <p>
-              Advanced control of your current browser tab uses included
-              extension files. Chrome-family browsers still ask you to approve
-              the extension once for security.
+              Take Action on your current browser tab uses the included
+              extension. <a class="text-link" href="#browser-setup">Load it once</a>
+              in Chrome or Edge. There is no separate download.
             </p>
           </article>
         </div>
@@ -230,14 +236,28 @@
         </div>
       </section>
 
+      <section class="manual-band" id="browser-setup" aria-labelledby="browser-setup-title">
+        <h2 id="browser-setup-title">Optional browser setup</h2>
+        <p>Load the extension for full access to your current browser tab. Skip this step if you do not use browser actions.</p>
+        <ol>
+          <li>Open <code>chrome://extensions</code> in Chrome or <code>edge://extensions</code> in Edge.</li>
+          <li>Turn on <strong>Developer mode</strong> and choose <strong>Load unpacked</strong>.</li>
+          <li>Select <code>%LOCALAPPDATA%\Programs\Cursivis\desktop\browser-extension-chromium</code>.</li>
+          <li>Refresh the tab you want to use. If the extension was already loaded, click <strong>Reload</strong> first.</li>
+        </ol>
+      </section>
+
       <section class="manual-band" aria-labelledby="manual">
         <h2 id="manual">Advanced fallback</h2>
         <p>
-          Most users should use the Windows installer above. If security software
-          blocks the download or setup, use the support links below and include
-          the message shown by Windows.
+          If Setup cannot download the runtime, download the matching ZIP,
+          leave it next to the 1.5.4 Setup EXE without extracting it, and run
+          Setup again. Setup verifies the ZIP before installing.
         </p>
         <div class="manual-links">
+          <a class="text-link" href="https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.4/CursivisRuntime_1_5_4.zip">
+            Download the matching runtime ZIP
+          </a>
           <a class="text-link" href="https://github.com/UnknownGod2011/MX--Cursivis">
             Source and documentation
           </a>

@@ -1,3 +1,4 @@
+using Cursivis.Security;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
@@ -121,7 +122,7 @@ internal static class TriggerDispatchClient
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await socket.ConnectAsync(IpcUri, cts.Token);
+            await LocalIpc.ConnectAsync(socket, IpcUri, LocalIpc.Trigger, cts.Token);
             return socket;
         }
         catch

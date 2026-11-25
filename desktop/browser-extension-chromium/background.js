@@ -1,7 +1,5 @@
 const HOST_NAME = "com.cursivis.browser_bridge";
 const REQUEST_TIMEOUT_MS = 90000;
-const DIRECT_BRIDGE_URL = "http://127.0.0.1:48830";
-const HTTP_RECONNECT_DELAY_MS = 3000;
 const KEEPALIVE_ALARM_NAME = "cursivis-bridge-keepalive";
 const KEEPALIVE_INTERVAL_MINUTES = 0.5;
 
@@ -9,9 +7,6 @@ let nativePort = null;
 let reconnectTimer = null;
 let connectedAtUtc = null;
 let lastNativeError = null;
-let bridgeTransport = "none";
-let httpBridgeLoopStarted = false;
-let httpBridgeAvailable = false;
 
 bootstrap();
 
@@ -56,27 +51,10 @@ async function ensureKeepAliveAlarm() {
 }
 
 async function ensureBridgeConnection() {
-  if (bridgeTransport === "http" && httpBridgeLoopStarted) {
-    return null;
-  }
-
-  if (await isDirectBridgeAvailable()) {
-    httpBridgeAvailable = true;
-    bridgeTransport = "http";
-    connectedAtUtc = connectedAtUtc || new Date().toISOString();
-    startHttpBridgeLoop();
-    return null;
-  }
-
-  httpBridgeAvailable = false;
   return await ensureNativeConnection();
 }
 
 async function ensureNativeConnection() {
-  if (bridgeTransport === "http") {
-    return null;
-  }
-
   if (nativePort) {
     return nativePort;
   }
@@ -85,16 +63,18 @@ async function ensureNativeConnection() {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
     connectedAtUtc = new Date().toISOString();
     lastNativeError = null;
-    nativePort.onMessage.addListener(handleNativeMessage);
-    nativePort.onDisconnect.addListener(() => {
+    const port = nativePort;
+    port.onMessage.addListener((message) => void handleNativeMessage(port, message));
+    port.onDisconnect.addListener(() => {
       const runtimeError = chrome.runtime.lastError;
       lastNativeError = runtimeError?.message || "Native host disconnected.";
+      if (nativePort !== port) {
+        return;
+      }
       nativePort = null;
       connectedAtUtc = null;
-      bridgeTransport = "none";
       scheduleReconnect();
     });
-    bridgeTransport = "native";
 
     postNativeMessage({
       type: "hello",
@@ -112,7 +92,6 @@ async function ensureNativeConnection() {
     });
   } catch (error) {
     lastNativeError = error instanceof Error ? error.message : String(error);
-    bridgeTransport = "none";
     scheduleReconnect();
   }
 
@@ -130,140 +109,38 @@ function scheduleReconnect() {
   }, 3000);
 }
 
-function postNativeMessage(message) {
-  if (!nativePort) {
+function postNativeMessage(message, port = nativePort) {
+  if (!port || port !== nativePort) {
     return;
   }
 
   try {
-    nativePort.postMessage(message);
+    port.postMessage(message);
   } catch (error) {
     lastNativeError = error instanceof Error ? error.message : String(error);
   }
 }
 
-async function handleNativeMessage(message) {
+async function handleNativeMessage(port, message) {
   if (!message || message.type !== "request" || !message.requestId || !message.action) {
     return;
   }
 
   try {
-    await ensureNativeConnection();
     const payload = await processRequest(message.action, message.payload || {});
     postNativeMessage({
       type: "response",
       requestId: message.requestId,
       ok: true,
       payload
-    });
+    }, port);
   } catch (error) {
     postNativeMessage({
       type: "response",
       requestId: message.requestId,
       ok: false,
       error: error instanceof Error ? error.message : String(error)
-    });
-  }
-}
-
-function startHttpBridgeLoop() {
-  if (httpBridgeLoopStarted) {
-    return;
-  }
-
-  httpBridgeLoopStarted = true;
-  void pollDirectBridge();
-}
-
-async function pollDirectBridge() {
-  while (bridgeTransport === "http") {
-    try {
-      const response = await fetch(`${DIRECT_BRIDGE_URL}/extension/pull`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(buildHelloPayload())
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP bridge returned ${response.status}.`);
-      }
-
-      const message = await response.json();
-      if (message?.requestId && message?.action) {
-        await processDirectBridgeRequest(message);
-      }
-    } catch (error) {
-      lastNativeError = error instanceof Error ? error.message : String(error);
-      bridgeTransport = "none";
-      httpBridgeAvailable = false;
-      httpBridgeLoopStarted = false;
-      setTimeout(() => {
-        void ensureBridgeConnection();
-      }, HTTP_RECONNECT_DELAY_MS);
-      return;
-    }
-  }
-
-  httpBridgeLoopStarted = false;
-}
-
-async function processDirectBridgeRequest(message) {
-  try {
-    const payload = await processRequest(message.action, message.payload || {});
-    await fetch(`${DIRECT_BRIDGE_URL}/extension/response`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        ...buildHelloPayload(),
-        requestId: message.requestId,
-        ok: true,
-        payload
-      })
-    });
-  } catch (error) {
-    await fetch(`${DIRECT_BRIDGE_URL}/extension/response`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        ...buildHelloPayload(),
-        requestId: message.requestId,
-        ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    });
-  }
-}
-
-function buildHelloPayload() {
-  return {
-    browserName: detectBrowserName(),
-    extensionId: chrome.runtime.id,
-    connectedAtUtc: connectedAtUtc || new Date().toISOString(),
-    capabilities: [
-      "get_active_tab_context",
-      "execute_plan",
-      "open_new_tab",
-      "switch_tab",
-      "scroll",
-      "extract_dom"
-    ]
-  };
-}
-
-async function isDirectBridgeAvailable() {
-  try {
-    const response = await fetch(`${DIRECT_BRIDGE_URL}/health`, {
-      method: "GET"
-    });
-    return response.ok;
-  } catch {
-    return false;
+    }, port);
   }
 }
 
@@ -559,6 +436,7 @@ async function getTab(tabId) {
 }
 
 async function updateTabUrl(tabId, url) {
+  validateNavigationUrl(url);
   await chrome.tabs.update(tabId, {
     url,
     active: true
@@ -568,6 +446,7 @@ async function updateTabUrl(tabId, url) {
 }
 
 async function createTab(url) {
+  validateNavigationUrl(url);
   const tab = await chrome.tabs.create({
     url,
     active: true
@@ -712,6 +591,13 @@ function isRestrictedUrl(url) {
     value.startsWith("opera://") ||
     value.startsWith("about:") ||
     value.startsWith("chrome-extension://");
+}
+
+function validateNavigationUrl(value) {
+  const url = new URL(value);
+  if (url.href !== "about:blank" && !["http:", "https:", "mailto:"].includes(url.protocol)) {
+    throw new Error("Cursivis can open web and email links in the browser.");
+  }
 }
 
 function detectBrowserName() {

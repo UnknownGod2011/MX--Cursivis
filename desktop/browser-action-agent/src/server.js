@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import localIpc from "../../../shared/local-ipc/local-service-auth.cjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +16,9 @@ let lastKnownPage = null;
 let activeChannel = "unknown";
 
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.disable("x-powered-by");
+app.use(localIpc.createAuthenticator(localIpc.takeServiceKey()).middleware);
+app.use(express.json({ limit: "10mb", inflate: false }));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -108,6 +111,14 @@ app.post("/execute-plan", async (req, res) => {
       details: getErrorMessage(error)
     });
   }
+});
+
+app.use((error, _req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
+  const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+  return res.status(status).json({ error: status === 500 ? "The browser action service failed." : "Invalid request body." });
 });
 
 app.listen(port, "127.0.0.1", () => {
@@ -360,12 +371,15 @@ async function executeStep(page, step, logs) {
 
   switch (step.tool) {
     case "navigate":
-      if (!step.url) {
-        throw new Error("navigate step requires url.");
+      if (!isSafeNavigationUrl(step.url)) {
+        throw new Error("Navigation requires an HTTP, HTTPS, or mail link.");
       }
       await page.goto(step.url, { waitUntil: "domcontentloaded" });
       return;
     case "open_new_tab": {
+      if (step.url && step.url !== "about:blank" && !isSafeNavigationUrl(step.url)) {
+        throw new Error("New tabs require an HTTP, HTTPS, or mail link.");
+      }
       const context = await ensureBrowserContext();
       const newPage = await context.newPage();
       wirePage(newPage);

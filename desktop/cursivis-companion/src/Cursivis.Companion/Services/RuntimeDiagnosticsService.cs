@@ -1,8 +1,8 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
-using System.Net.Sockets;
+using System.Net.WebSockets;
 
 namespace Cursivis.Companion.Services;
 
@@ -40,8 +40,8 @@ public sealed class RuntimeDiagnosticsService
         }
 
         var bootstrapper = new RuntimeBootstrapper();
-        var backendWasHealthy = await IsHttpHealthyAsync(profile.BackendUrl, cancellationToken);
-        var browserWasHealthy = await IsHttpHealthyAsync(profile.BrowserAgentUrl, cancellationToken);
+        var backendWasHealthy = await IsHttpHealthyAsync(profile.BackendUrl, LocalIpc.Backend, cancellationToken);
+        var browserWasHealthy = await IsHttpHealthyAsync(profile.BrowserAgentUrl, LocalIpc.BrowserAgent, cancellationToken);
         await bootstrapper.EnsureRuntimeReadyAsync(cancellationToken);
         if (!backendWasHealthy)
         {
@@ -56,9 +56,11 @@ public sealed class RuntimeDiagnosticsService
         var healthy =
             IsProcessRunning(profile.CompanionExecutable) &&
             IsProcessRunning(profile.HotkeyHostExecutable) &&
-            await IsHttpHealthyAsync(profile.BackendUrl, cancellationToken) &&
-            await IsTcpPortOpenAsync(48711, cancellationToken) &&
-            await IsTcpPortOpenAsync(48712, cancellationToken);
+            await IsHttpHealthyAsync(profile.BackendUrl, LocalIpc.Backend, cancellationToken) &&
+            await IsHttpHealthyAsync(profile.BrowserAgentUrl, LocalIpc.BrowserAgent, cancellationToken) &&
+            await IsHttpHealthyAsync(profile.ExtensionBridgeUrl, LocalIpc.BrowserBridge, cancellationToken) &&
+            await IsSocketHealthyAsync("ws://127.0.0.1:48711/cursivis-trigger/", LocalIpc.Trigger, cancellationToken) &&
+            await IsSocketHealthyAsync("ws://127.0.0.1:48712/cursivis-haptics/", LocalIpc.Haptics, cancellationToken);
 
         return healthy
             ? RuntimeDiagnosticsResult.Healthy(
@@ -128,33 +130,17 @@ public sealed class RuntimeDiagnosticsService
         return false;
     }
 
-    private static async Task<bool> IsHttpHealthyAsync(string baseUrl, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            return false;
-        }
+    private static Task<bool> IsHttpHealthyAsync(string baseUrl, string scope, CancellationToken cancellationToken) =>
+        RuntimeBootstrapper.IsHealthyAsync($"{baseUrl.TrimEnd('/')}/health", cancellationToken, scope);
 
-        try
-        {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            using var response = await client.GetAsync($"{baseUrl.TrimEnd('/')}/health", cancellationToken);
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static async Task<bool> IsTcpPortOpenAsync(int port, CancellationToken cancellationToken)
+    private static async Task<bool> IsSocketHealthyAsync(string endpoint, string scope, CancellationToken cancellationToken)
     {
         try
         {
-            using var client = new TcpClient();
+            using var client = new ClientWebSocket();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(1));
-            await client.ConnectAsync("127.0.0.1", port, timeout.Token);
+            await LocalIpc.ConnectAsync(client, new Uri(endpoint), scope, timeout.Token);
             return true;
         }
         catch

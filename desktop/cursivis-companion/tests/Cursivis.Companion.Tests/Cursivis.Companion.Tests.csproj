@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Cursivis.Companion\Cursivis.Companion.csproj" />
+    <Compile Include="..\..\..\cursivis-setup\src\Cursivis.Setup\RuntimeUpdateJournal.cs" Link="Installer\RuntimeUpdateJournal.cs" />
   </ItemGroup>
 </Project>

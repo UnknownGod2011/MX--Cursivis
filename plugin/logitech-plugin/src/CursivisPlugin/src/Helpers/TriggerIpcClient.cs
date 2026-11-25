@@ -2,6 +2,7 @@
 
 namespace Loupedeck.CursivisPlugin
 {
+    using Cursivis.Security;
     using System;
     using System.Net.WebSockets;
     using System.Text;
@@ -81,7 +82,7 @@ namespace Loupedeck.CursivisPlugin
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(900));
-                await socket.ConnectAsync(IpcUri, cts.Token);
+                await LocalIpc.ConnectAsync(socket, IpcUri, LocalIpc.Trigger, cts.Token);
                 return socket;
             }
             catch

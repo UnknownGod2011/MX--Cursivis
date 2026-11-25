@@ -1,4 +1,5 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -10,21 +11,17 @@ public sealed class ExtensionAutomationClient : IDisposable
 {
     private readonly HttpClient _httpClient;
 
-    public ExtensionAutomationClient()
+    public ExtensionAutomationClient(string? configuredUrl = null)
     {
         var bridgeUrl = Environment.GetEnvironmentVariable("CURSIVIS_EXTENSION_BRIDGE_URL")
-            ?? "http://127.0.0.1:48830";
+            ?? configuredUrl ?? "http://127.0.0.1:48830";
         var timeoutSeconds = 90;
         if (int.TryParse(Environment.GetEnvironmentVariable("CURSIVIS_EXTENSION_HTTP_TIMEOUT_SEC"), out var parsedTimeoutSeconds))
         {
             timeoutSeconds = Math.Clamp(parsedTimeoutSeconds, 30, 180);
         }
 
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(bridgeUrl),
-            Timeout = TimeSpan.FromSeconds(timeoutSeconds)
-        };
+        _httpClient = LocalIpc.CreateHttpClient(new Uri(bridgeUrl), LocalIpc.BrowserBridge, TimeSpan.FromSeconds(timeoutSeconds));
     }
 
     public async Task<ExtensionBridgeHealthResponse?> TryGetHealthAsync(CancellationToken cancellationToken)

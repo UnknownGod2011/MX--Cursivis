@@ -4,6 +4,7 @@ namespace Cursivis.Companion.LiveMode;
 
 using System.IO;
 using System.Text.Json;
+using Cursivis.Companion.Services;
 
 public sealed class LiveModeActionEntry
 {
@@ -57,7 +58,7 @@ public sealed class LiveModeActionHistoryService
             _entries.Insert(0, new LiveModeActionEntry
             {
                 Action = action ?? "",
-                Detail = Shorten(detail, 500),
+                Detail = Shorten(CredentialRedactor.Redact(detail), 500),
                 Success = success,
                 ConfirmationRequired = confirmationRequired,
             });

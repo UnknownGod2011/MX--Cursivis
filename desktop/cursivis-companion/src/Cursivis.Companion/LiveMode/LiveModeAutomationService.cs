@@ -1659,10 +1659,10 @@ public sealed class LiveModeAutomationService : IDisposable
                 LockWorkStation();
                 return Logged("lock_screen", "", true, "Computer locked.");
             case "shutdown":
-                Process.Start(new ProcessStartInfo { FileName = "shutdown.exe", Arguments = "/s /t 0", UseShellExecute = false });
+                Process.Start(new ProcessStartInfo { FileName = Path.Combine(Environment.SystemDirectory, "shutdown.exe"), Arguments = "/s /t 0", UseShellExecute = false });
                 return Logged("shutdown", "", true, "Shutting down.");
             case "restart":
-                Process.Start(new ProcessStartInfo { FileName = "shutdown.exe", Arguments = "/r /t 0", UseShellExecute = false });
+                Process.Start(new ProcessStartInfo { FileName = Path.Combine(Environment.SystemDirectory, "shutdown.exe"), Arguments = "/r /t 0", UseShellExecute = false });
                 return Logged("restart", "", true, "Restarting.");
             case "sleep":
                 Process.Start(new ProcessStartInfo
@@ -1675,7 +1675,7 @@ public sealed class LiveModeAutomationService : IDisposable
             case "disable wifi":
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "netsh.exe",
+                    FileName = Path.Combine(Environment.SystemDirectory, "netsh.exe"),
                     Arguments = "interface set interface name=\"Wi-Fi\" admin=disabled",
                     UseShellExecute = false,
                     CreateNoWindow = true,

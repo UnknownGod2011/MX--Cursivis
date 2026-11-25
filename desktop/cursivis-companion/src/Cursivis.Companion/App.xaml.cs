@@ -3,6 +3,7 @@ using Cursivis.Companion.LiveMode;
 using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
+using Cursivis.Security;
 using System.Net.WebSockets;
 using System.Diagnostics;
 using System.IO;
@@ -93,6 +94,7 @@ public partial class App : Application
             LiveModeLog.Info("boundary=startup.runtime_bootstrap.begin");
             await runtimeBootstrapper.EnsureRuntimeReadyAsync(CancellationToken.None);
             LiveModeLog.Info("boundary=startup.runtime_bootstrap.end");
+            var runtimeProfile = await new RuntimeLaunchProfileService().TryLoadAsync();
 
             var clipboardService = new ClipboardService();
             var intentMemoryService = new Services.IntentMemoryService();
@@ -101,9 +103,9 @@ public partial class App : Application
             var selectionDetector = new SelectionDetector(clipboardService);
             var lassoSelectionService = new LassoSelectionService();
             var screenCaptureService = new ScreenCaptureService();
-            _geminiClient = new GeminiClient();
-            _browserAutomationClient = new BrowserAutomationClient();
-            _extensionAutomationClient = new ExtensionAutomationClient();
+            _geminiClient = new GeminiClient(runtimeProfile?.BackendUrl);
+            _browserAutomationClient = new BrowserAutomationClient(runtimeProfile?.BrowserAgentUrl);
+            _extensionAutomationClient = new ExtensionAutomationClient(runtimeProfile?.ExtensionBridgeUrl);
             var activeBrowserAutomationService = new ActiveBrowserAutomationService(clipboardService);
             var voiceCaptureService = new VoiceCaptureService();
             var voiceCommandPromptService = new VoiceCommandPromptService(_geminiClient, voiceCaptureService);
@@ -215,7 +217,7 @@ public partial class App : Application
             {
                 using var socket = new ClientWebSocket();
                 using var connectCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(900));
-                await socket.ConnectAsync(new Uri("ws://127.0.0.1:48711/cursivis-trigger/"), connectCts.Token);
+                await LocalIpc.ConnectAsync(socket, new Uri("ws://127.0.0.1:48711/cursivis-trigger/"), LocalIpc.Trigger, connectCts.Token);
 
                 var payload = new TriggerEventPayload
                 {

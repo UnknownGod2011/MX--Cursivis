@@ -438,7 +438,7 @@ internal static class TriggerDispatchClient
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await socket.ConnectAsync(IpcUri, cts.Token);
+            await Cursivis.Security.LocalIpc.ConnectAsync(socket, IpcUri, Cursivis.Security.LocalIpc.Trigger, cts.Token);
             return socket;
         }
         catch

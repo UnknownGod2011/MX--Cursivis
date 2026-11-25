@@ -15,6 +15,7 @@ import {
   hasConfiguredApiKeys
 } from "./apiKeyPool.js";
 import { redactGeminiCredentials, validateGeminiApiKeyPool } from "./geminiCredentials.js";
+import { GeminiRequestStopped } from "./geminiRetryControl.js";
 import { createBrowserActionPlanner, createBrowserActionPlanRefiner } from "./browserActionPlanner.js";
 import { describeDominantColorsFromImage } from "./imageAnalysis.js";
 import { createSchemaValidators } from "./schemas.js";
@@ -22,6 +23,7 @@ import { createSchemaValidators } from "./schemas.js";
 const CODE_OUTPUT_ACTIONS = new Set(["improve_code", "debug_code", "optimize_code", "explain_code"]);
 const FALSE_VALUES = new Set(["0", "false", "off", "no"]);
 const TEXT_SELECTION_KINDS = new Set(["text", "text_image"]);
+const OLLAMA_PROBE_TIMEOUT_MS = 3000;
 const USEFUL_TRANSFORM_ACTIONS = new Set(["polish_email", "draft_reply", "rewrite", "rewrite_structured", "optimize_prompt", "translate", "bullet_points", "summarize", "explain", "extract_insights"]);
 function withTimeout(promise, timeoutMs, fallbackValue) {
   let timer = null;
@@ -58,7 +60,28 @@ function extractRetryAfterSeconds(message) {
   return 30;
 }
 
-function sendClassifiedProviderError(res, serviceName, details, operation) {
+function requestLifetime(res) {
+  const controller = new AbortController();
+  res.once("close", () => {
+    if (!res.writableEnded) {
+      controller.abort();
+    }
+  });
+  return controller.signal;
+}
+
+function sendClassifiedProviderError(res, serviceName, failure, operation) {
+  if (res.destroyed) {
+    return res;
+  }
+  if (failure instanceof GeminiRequestStopped) {
+    const cancelled = failure.code === "CURSIVIS_GEMINI_CANCELLED";
+    return res.status(cancelled ? 408 : 504).json({
+      error: cancelled ? `${operation} was cancelled.` : `${operation} took too long. Please try again.`,
+      timestampUtc: new Date().toISOString()
+    });
+  }
+  const details = getErrorMessage(failure);
   const category = classifyGeminiError(details);
   const timestampUtc = new Date().toISOString();
 
@@ -439,7 +462,7 @@ async function getLocalOllamaStatus({ ollamaUrl, localModel } = {}) {
   const model = String(localModel || process.env.CURSIVIS_LOCAL_MODEL || "granite3.2-vision:2b").trim();
 
   try {
-    const response = await fetch(`${baseUrl}/api/tags`);
+    const response = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(OLLAMA_PROBE_TIMEOUT_MS) });
     const bodyText = await response.text();
     let body = {};
     if (bodyText.trim()) {
@@ -496,7 +519,8 @@ async function unloadLocalOllamaModel({ ollamaUrl, localModel } = {}) {
   }
 
   try {
-    const runningResponse = await fetch(`${baseUrl}/api/ps`);
+    const signal = AbortSignal.timeout(OLLAMA_PROBE_TIMEOUT_MS);
+    const runningResponse = await fetch(`${baseUrl}/api/ps`, { signal });
     if (!runningResponse.ok) {
       return false;
     }
@@ -511,6 +535,7 @@ async function unloadLocalOllamaModel({ ollamaUrl, localModel } = {}) {
 
     await fetch(`${baseUrl}/api/generate`, {
       method: "POST",
+      signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model,
@@ -539,7 +564,7 @@ function normalizeBaseUrlForRuntime(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
-export function createApp({ aiProvider, textGenerator, intentRouter, optionGenerator, browserActionPlanner } = {}) {
+export function createApp({ aiProvider, textGenerator, intentRouter, optionGenerator, browserActionPlanner, localMiddleware } = {}) {
   const app = express();
   const { validateRequest, validateResponse } = createSchemaValidators();
   let provider = aiProvider ?? createAiProviderFromEnv();
@@ -550,7 +575,11 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
   const planBrowserAction = browserActionPlanner ?? createBrowserActionPlanner({ generateText });
   const refineBrowserActionPlan = createBrowserActionPlanRefiner({ generateText, planBrowserAction });
 
-  app.use(express.json({ limit: "8mb" }));
+  app.disable("x-powered-by");
+  if (localMiddleware) {
+    app.use(localMiddleware);
+  }
+  app.use(express.json({ limit: "8mb", inflate: false }));
 
   app.get("/health", (_req, res) => {
     res.json({
@@ -615,6 +644,11 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       process.env.CURSIVIS_OLLAMA_URL = req.body.ollamaUrl.trim();
     }
 
+    if (!aiProvider) {
+      provider = createAiProviderFromEnv();
+    }
+    const displayName = provider.displayName || "AI provider";
+
     if (shouldUnloadPreviousLocal) {
       await unloadLocalOllamaModel({
         ollamaUrl: previousOllamaUrl,
@@ -622,14 +656,10 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       });
     }
 
-    if (!aiProvider) {
-      provider = createAiProviderFromEnv();
-    }
-
     res.json({
       ok: true,
       provider: providerId,
-      displayName: provider.displayName || "AI provider",
+      displayName,
       note: "Provider changes are active for new requests."
     });
   });
@@ -905,6 +935,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       });
     }
 
+    const signal = requestLifetime(res);
     const requestedAction = normalizeActionHint(actionHint);
     let selectionType = "general_text";
     let alternatives = alternativesForType(selectionType);
@@ -943,13 +974,14 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
               imageMimeType: selection.imageMimeType,
               mode: req.body.mode,
               actionHint,
-              voiceCommand
+              voiceCommand,
+              signal
             }),
             selection.text
           );
         } catch (error) {
           const details = getErrorMessage(error);
-          const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Intent routing");
+          const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Intent routing");
           if (classifiedError) {
             return classifiedError;
           }
@@ -1044,13 +1076,14 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
             imageMimeType: selection.imageMimeType,
             mode: req.body.mode,
             actionHint,
-            voiceCommand
+            voiceCommand,
+            signal
           }),
           ""
         );
       } catch (error) {
         const details = getErrorMessage(error);
-        const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Image intent routing");
+        const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Image intent routing");
         if (classifiedError) {
           return classifiedError;
         }
@@ -1130,7 +1163,8 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           ...generationInput,
           selectionType,
           action: resolvedAction,
-          text: selection.text
+          text: selection.text,
+          signal
         });
 
         resultText = sanitizeResultText(generated.text, resolvedAction);
@@ -1148,7 +1182,8 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           }),
           useGrounding: generationUseGrounding,
           action: resolvedAction,
-          text: selection.text
+          text: selection.text,
+          signal
         });
         resultText = sanitizeResultText(generated.text, resolvedAction);
       }
@@ -1165,7 +1200,8 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           }),
           useGrounding: false,
           action: resolvedAction,
-          text: selection.text
+          text: selection.text,
+          signal
         });
         resultText = sanitizeResultText(generated.text, resolvedAction);
       }
@@ -1198,7 +1234,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(response);
     } catch (error) {
       const details = getErrorMessage(error);
-      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Analysis");
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Analysis");
       if (classifiedError) {
         return classifiedError;
       }
@@ -1244,6 +1280,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           ? "text_image"
           : "text";
       const selectionText = selection.text || "";
+      const signal = requestLifetime(res);
       let intentDecision = normalizeIntentDecision(
         await routeIntent({
           selectionKind,
@@ -1252,7 +1289,8 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           imageMimeType: selection.imageMimeType,
           mode: req.body.mode,
           actionHint: req.body.actionHint,
-          voiceCommand: req.body.voiceCommand
+          voiceCommand: req.body.voiceCommand,
+          signal
         }),
         selectionText
       );
@@ -1274,7 +1312,8 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
           imageBase64: selection.imageBase64,
           imageMimeType: selection.imageMimeType,
           contentType: intentDecision.contentType,
-          currentOptions: intentDecision.alternatives
+          currentOptions: intentDecision.alternatives,
+          signal
         }),
         2500,
         []
@@ -1289,7 +1328,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(toSuggestionResponse(intentDecision, extendedAlternatives));
     } catch (error) {
       const details = getErrorMessage(error);
-      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Suggestion routing");
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Suggestion routing");
       if (classifiedError) {
         return classifiedError;
       }
@@ -1335,6 +1374,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
     const startedAt = Date.now();
     try {
       const generated = await transcribeGenerateText({
+        signal: requestLifetime(res),
         modelOverride:
           process.env.GEMINI_TRANSCRIBE_MODEL ||
           process.env.GEMINI_MODEL ||
@@ -1379,7 +1419,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       });
     } catch (error) {
       const details = getErrorMessage(error);
-      const classifiedError = sendClassifiedProviderError(res, transcribeServiceName, details, "Transcription");
+      const classifiedError = sendClassifiedProviderError(res, transcribeServiceName, error, "Transcription");
       if (classifiedError) {
         return classifiedError;
       }
@@ -1428,7 +1468,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(plan);
     } catch (error) {
       const details = getErrorMessage(error);
-      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Browser action planning");
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Browser action planning");
       if (classifiedError) {
         return classifiedError;
       }
@@ -1491,7 +1531,7 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
       return res.json(plan);
     } catch (error) {
       const details = getErrorMessage(error);
-      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), details, "Browser action refinement");
+      const classifiedError = sendClassifiedProviderError(res, aiServiceName(), error, "Browser action refinement");
       if (classifiedError) {
         return classifiedError;
       }
@@ -1503,6 +1543,13 @@ export function createApp({ aiProvider, textGenerator, intentRouter, optionGener
     }
   });
 
+  app.use((error, _req, res, next) => {
+    if (res.headersSent) {
+      return next(error);
+    }
+    const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+    return res.status(status).json({ error: status === 500 ? "The local AI service could not finish the request." : "Invalid request body." });
+  });
   return app;
 }
 

@@ -18,16 +18,17 @@ if ([string]::IsNullOrWhiteSpace($ExtensionId)) {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-$hostDir = Join-Path $root "desktop\browser-native-host"
-$hostLauncher = Join-Path $hostDir "launch.cmd"
-
-if (-not (Test-Path $hostLauncher)) {
-    throw "Native host launcher not found at $hostLauncher"
+$extensionId = $ExtensionId.Trim()
+if ($extensionId -cnotmatch '^[a-p]{32}$') {
+    throw "ExtensionId does not look like a valid unpacked Chromium extension ID."
 }
 
-$extensionId = $ExtensionId.Trim()
-if ($extensionId -notmatch '^[a-p]{32}$') {
-    throw "ExtensionId does not look like a valid unpacked Chromium extension ID."
+$hostLauncher = Join-Path $env:LOCALAPPDATA "Programs\Cursivis\app\browser-native-host\Cursivis.BrowserNativeHost.exe"
+if (-not (Test-Path -LiteralPath $hostLauncher)) {
+    $hostDir = Join-Path $root "desktop\cursivis-browser-native-host\src\Cursivis.BrowserNativeHost"
+    dotnet build (Join-Path $hostDir "Cursivis.BrowserNativeHost.csproj") -c Debug --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Building the development browser host failed." }
+    $hostLauncher = Join-Path $hostDir "bin\Debug\net8.0-windows\Cursivis.BrowserNativeHost.exe"
 }
 
 $manifestDir = Join-Path $env:LOCALAPPDATA "Cursivis\browser-native-host"
@@ -35,15 +36,32 @@ New-Item -ItemType Directory -Force $manifestDir | Out-Null
 $manifestPath = Join-Path $manifestDir "com.cursivis.browser_bridge.json"
 
 $allowedOrigin = "chrome-extension://$extensionId/"
+$origins = @($allowedOrigin)
+if (Test-Path -LiteralPath $manifestPath) {
+    try {
+        $previous = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        if ($previous.name -eq 'com.cursivis.browser_bridge') {
+            $origins += @($previous.allowed_origins | Where-Object { $_ -cmatch '^chrome-extension://[a-p]{32}/$' })
+        }
+    }
+    catch { Write-Warning "Replacing unreadable browser registration." }
+}
 $manifest = @{
     name = "com.cursivis.browser_bridge"
     description = "Cursivis current-tab browser bridge"
     path = $hostLauncher
     type = "stdio"
-    allowed_origins = @($allowedOrigin)
+    allowed_origins = @($origins | Sort-Object -Unique)
 } | ConvertTo-Json -Depth 4
 
-Set-Content -Path $manifestPath -Value $manifest -Encoding UTF8
+$staged = "$manifestPath.$([Guid]::NewGuid().ToString('N')).tmp"
+try {
+    [IO.File]::WriteAllText($staged, $manifest)
+    Move-Item -LiteralPath $staged -Destination $manifestPath -Force
+}
+finally {
+    if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged }
+}
 
 $registryTargets = @{
     Chrome   = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.cursivis.browser_bridge"

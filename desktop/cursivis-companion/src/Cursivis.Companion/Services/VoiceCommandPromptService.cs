@@ -33,7 +33,8 @@ public sealed class VoiceCommandPromptService
         _autoStopSilenceDuration = ResolveSilenceDuration();
         _initialSpeechTimeout = TimeSpan.FromMilliseconds(ParseIntEnv("CURSIVIS_INITIAL_SPEECH_TIMEOUT_MS", defaultValue: 9000, min: 2000, max: 20000));
         _voiceTranscriptionTimeout = TimeSpan.FromSeconds(ParseIntEnv("CURSIVIS_VOICE_TRANSCRIBE_TIMEOUT_SECONDS", defaultValue: 12, min: 5, max: 30));
-        _voiceDebugDirectory = Path.Combine(Path.GetTempPath(), "Cursivis", "voice-debug");
+        _voiceDebugDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cursivis", "logs", "voice");
     }
 
     public async Task<string?> PromptAsync(
@@ -53,7 +54,6 @@ public sealed class VoiceCommandPromptService
 
         string? partialTranscript = null;
         string? finalTranscript = null;
-        byte[]? capturedAudio = null;
         var debugSession = new VoiceDebugSession
         {
             StartedAtUtc = DateTime.UtcNow,
@@ -66,10 +66,9 @@ public sealed class VoiceCommandPromptService
             TranscriptionTimeoutMs = (int)_voiceTranscriptionTimeout.TotalMilliseconds
         };
 
-        void RecordOutcome(string disposition, string? command)
+        void RecordOutcome(string disposition)
         {
             debugSession.ResultDisposition = disposition;
-            debugSession.ReturnedCommand = command;
         }
 
         try
@@ -80,14 +79,13 @@ public sealed class VoiceCommandPromptService
             {
                 try
                 {
-                    Report(Models.OrbState.Listening, "Recording... tap stop");
                     ReportInputLevel(0);
                     await using var liveClient = new LiveVoiceCommandClient();
                     await liveClient.ConnectAsync(cancellationToken);
                     liveClient.TranscriptUpdated += (_, text) => partialTranscript = text;
 
+                    Report(Models.OrbState.Listening, "Recording... tap stop");
                     using var session = _voiceCaptureService.CreateSession();
-                    debugSession.SourceName = session.SourceName;
                     session.InputLevelChanged += OnInputLevelChanged;
                     session.ChunkAvailable += OnVoiceChunkAvailable;
                     session.Start();
@@ -130,7 +128,7 @@ public sealed class VoiceCommandPromptService
                     session.ChunkAvailable -= OnVoiceChunkAvailable;
                     ReportInputLevel(0);
                     Report(Models.OrbState.Processing, processingMessage);
-                    capturedAudio = await session.StopAsync();
+                    var capturedAudio = await session.StopAsync();
                     debugSession.CapturedAudioBytes = capturedAudio?.Length ?? 0;
                     debugSession.CapturedDurationMs = (int)session.CapturedDuration.TotalMilliseconds;
                     debugSession.DetectedSpeech = session.HasDetectedSpeech;
@@ -142,7 +140,7 @@ public sealed class VoiceCommandPromptService
                         var liveTranscript = !string.IsNullOrWhiteSpace(finalTranscript) ? finalTranscript : partialTranscript;
                         if (!string.IsNullOrWhiteSpace(liveTranscript) && !_requireVoiceConfirmation)
                         {
-                            RecordOutcome("live-direct", liveTranscript.Trim());
+                            RecordOutcome("live-direct");
                             Report(Models.OrbState.Completed, "Voice command ready");
                             return liveTranscript.Trim();
                         }
@@ -152,7 +150,7 @@ public sealed class VoiceCommandPromptService
                             liveTranscript,
                             "Voice captured",
                             "Review or refine the spoken command before Cursivis runs it.");
-                        RecordOutcome("live-reviewed", reviewedCommand);
+                        RecordOutcome("live-reviewed");
                         return reviewedCommand;
                     }
 
@@ -177,7 +175,7 @@ public sealed class VoiceCommandPromptService
                 }
                 catch (Exception ex)
                 {
-                    debugSession.Notes.Add($"Live voice fallback: {ex.Message}");
+                    debugSession.Notes.Add($"Live voice fallback: {ex.GetType().Name}");
                     ReportInputLevel(0);
                     Report(Models.OrbState.Processing, "Realtime voice unavailable. Falling back...");
                 }
@@ -188,7 +186,6 @@ public sealed class VoiceCommandPromptService
             Report(Models.OrbState.Listening, "Recording... tap stop");
                 ReportInputLevel(0);
                 using var session = _voiceCaptureService.CreateSession();
-                debugSession.SourceName ??= session.SourceName;
                 session.InputLevelChanged += OnInputLevelChanged;
                 session.Start();
 
@@ -259,7 +256,6 @@ public sealed class VoiceCommandPromptService
 
                 session.InputLevelChanged -= OnInputLevelChanged;
                 var captured = await session.StopAsync();
-                capturedAudio = captured;
                 debugSession.CapturedAudioBytes = captured?.Length ?? 0;
                 debugSession.CapturedDurationMs = (int)session.CapturedDuration.TotalMilliseconds;
                 debugSession.DetectedSpeech = session.HasDetectedSpeech;
@@ -273,7 +269,7 @@ public sealed class VoiceCommandPromptService
                     }
                     catch (Exception ex)
                     {
-                        debugSession.Notes.Add($"Buffered transcription failed: {ex.Message}");
+                        debugSession.Notes.Add($"Buffered transcription failed: {ex.GetType().Name}");
                         Report(Models.OrbState.Completed, "Couldn't transcribe clearly. Switching to text.");
                     }
                 }
@@ -298,7 +294,7 @@ public sealed class VoiceCommandPromptService
             }
             catch (Exception ex)
             {
-                debugSession.Notes.Add($"Voice capture fallback: {ex.Message}");
+                debugSession.Notes.Add($"Voice capture fallback: {ex.GetType().Name}");
                 ReportInputLevel(0);
                 Report(Models.OrbState.Completed, "Voice capture unavailable. Switching to text.");
             }
@@ -313,7 +309,7 @@ public sealed class VoiceCommandPromptService
         var initialCommand = !string.IsNullOrWhiteSpace(finalTranscript) ? finalTranscript : partialTranscript;
         if (!string.IsNullOrWhiteSpace(initialCommand) && !_requireVoiceConfirmation)
         {
-            RecordOutcome("transcribed-direct", initialCommand.Trim());
+            RecordOutcome("transcribed-direct");
             Report(Models.OrbState.Completed, "Voice command ready");
             return initialCommand.Trim();
         }
@@ -331,18 +327,14 @@ public sealed class VoiceCommandPromptService
             string.IsNullOrWhiteSpace(initialCommand)
                 ? "Cursivis could not confidently capture a voice command this time. Type it below instead."
                 : "Edit the spoken command if you want to be more specific before Cursivis runs it.");
-        RecordOutcome(
-            string.IsNullOrWhiteSpace(initialCommand) ? "typed-fallback" : "transcribed-reviewed",
-            fallbackCommand);
+        RecordOutcome(string.IsNullOrWhiteSpace(initialCommand) ? "typed-fallback" : "transcribed-reviewed");
 
         return fallbackCommand;
         }
         finally
         {
             debugSession.CompletedAtUtc = DateTime.UtcNow;
-            debugSession.PartialTranscript = partialTranscript;
-            debugSession.FinalTranscript = finalTranscript;
-            await PersistVoiceDebugArtifactAsync(debugSession, capturedAudio);
+            await PersistVoiceDebugArtifactAsync(debugSession);
         }
     }
 
@@ -435,7 +427,7 @@ public sealed class VoiceCommandPromptService
         }
         catch (Exception ex)
         {
-            debugSession.Notes.Add($"Audio normalization skipped: {ex.Message}");
+            debugSession.Notes.Add($"Audio normalization skipped: {ex.GetType().Name}");
             return captured;
         }
     }
@@ -477,13 +469,13 @@ public sealed class VoiceCommandPromptService
                 DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
                 Success = false,
                 TimedOut = false,
-                Error = ex.Message
+                Error = ex.GetType().Name
             });
             return null;
         }
     }
 
-    private async Task PersistVoiceDebugArtifactAsync(VoiceDebugSession session, byte[]? capturedAudio)
+    private async Task PersistVoiceDebugArtifactAsync(VoiceDebugSession session)
     {
         try
         {
@@ -494,13 +486,6 @@ public sealed class VoiceCommandPromptService
             var suffix = Guid.NewGuid().ToString("N")[..8];
             var baseName = $"{stamp}-{suffix}";
             var metadataPath = Path.Combine(_voiceDebugDirectory, $"{baseName}.json");
-
-            if (capturedAudio is { Length: > 0 })
-            {
-                var audioPath = Path.Combine(_voiceDebugDirectory, $"{baseName}.wav");
-                await File.WriteAllBytesAsync(audioPath, capturedAudio);
-                session.AudioPath = audioPath;
-            }
 
             await File.WriteAllTextAsync(
                 metadataPath,
@@ -522,7 +507,7 @@ public sealed class VoiceCommandPromptService
                 return;
             }
 
-            foreach (var file in directory.GetFiles()
+            foreach (var file in directory.GetFiles("*.json")
                          .OrderByDescending(file => file.CreationTimeUtc)
                          .Skip(24))
             {
@@ -596,8 +581,6 @@ public sealed class VoiceCommandPromptService
 
         public DateTime CompletedAtUtc { get; set; }
 
-        public string? SourceName { get; set; }
-
         public bool LiveVoiceEnabled { get; init; }
 
         public bool StreamingTranscriptionEnabled { get; init; }
@@ -642,15 +625,7 @@ public sealed class VoiceCommandPromptService
 
         public int SpeechSampleCount { get; set; }
 
-        public string? PartialTranscript { get; set; }
-
-        public string? FinalTranscript { get; set; }
-
-        public string? ReturnedCommand { get; set; }
-
         public string? ResultDisposition { get; set; }
-
-        public string? AudioPath { get; set; }
 
         public List<string> Notes { get; } = [];
 

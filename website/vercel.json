@@ -5,6 +5,11 @@
   "trailingSlash": false,
   "redirects": [
     {
+      "source": "/downloads/CursivisCompanionSetup_1_5_4.exe",
+      "destination": "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.4/CursivisCompanionSetup_1_5_4.exe",
+      "permanent": false
+    },
+    {
       "source": "/downloads/CursivisCompanionSetup_1_5_3.exe",
       "destination": "https://github.com/UnknownGod2011/MX--Cursivis/releases/download/v1.5.3/CursivisCompanionSetup_1_5_3.exe",
       "permanent": false

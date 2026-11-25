@@ -1,5 +1,6 @@
 namespace Loupedeck.CursivisPlugin
 {
+    using Cursivis.Security;
     using System;
     using System.IO;
     using System.Net.WebSockets;
@@ -80,7 +81,7 @@ namespace Loupedeck.CursivisPlugin
                     using var socket = new ClientWebSocket();
                     using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     connectCts.CancelAfter(TimeSpan.FromSeconds(2));
-                    await socket.ConnectAsync(HapticUri, connectCts.Token);
+                    await LocalIpc.ConnectAsync(socket, HapticUri, LocalIpc.Haptics, connectCts.Token);
                     PluginLog.Info("Connected to companion haptic channel.");
                     unavailableLogged = false;
                     retryDelay = TimeSpan.FromSeconds(3);

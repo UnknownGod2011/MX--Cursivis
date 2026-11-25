@@ -1,4 +1,5 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -9,6 +10,7 @@ namespace Cursivis.Companion.Services;
 public sealed class HapticEventHub : IDisposable
 {
     private readonly HttpListener _listener = new();
+    private readonly LocalWebSocketAccess _access;
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly CancellationTokenSource _cts = new();
     private readonly List<WebSocket> _clients = [];
@@ -16,7 +18,13 @@ public sealed class HapticEventHub : IDisposable
     private Task? _acceptLoopTask;
 
     public HapticEventHub(string prefix = "http://127.0.0.1:48712/cursivis-haptics/")
+        : this(prefix, LocalIpc.GetServiceKey(LocalIpc.Haptics))
     {
+    }
+
+    internal HapticEventHub(string prefix, byte[] key)
+    {
+        _access = new LocalWebSocketAccess(new Uri(prefix), key);
         _listener.Prefixes.Add(prefix);
     }
 
@@ -121,10 +129,8 @@ public sealed class HapticEventHub : IDisposable
 
     private async Task HandleContextAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
-        if (!context.Request.IsWebSocketRequest)
+        if (!_access.TryAuthorize(context))
         {
-            context.Response.StatusCode = 400;
-            context.Response.Close();
             return;
         }
 
@@ -147,7 +153,8 @@ public sealed class HapticEventHub : IDisposable
                 RemoveClient(socket);
                 try
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "closing", CancellationToken.None);
+                    using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "closing", closeTimeout.Token);
                 }
                 catch
                 {
@@ -162,13 +169,10 @@ public sealed class HapticEventHub : IDisposable
     private async Task ReceiveUntilCloseAsync(WebSocket socket, CancellationToken cancellationToken)
     {
         var buffer = new byte[256];
-        while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+        if (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
         {
-            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-            if (result.MessageType == WebSocketMessageType.Close)
-            {
-                return;
-            }
+            // Subscriptions are read-only. Any client message ends the subscription.
+            await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
         }
     }
 

@@ -37,6 +37,7 @@
     <!-- Dial transport remains supported by Companion, but the implementation-only
          adjustment is not exposed in the Options+/Actions Ring picker. -->
     <Compile Remove="Actions\CursivisDialAdjustment.cs" />
+    <Compile Include="..\..\..\..\..\shared\local-ipc\LocalIpc.cs" Link="Security\LocalIpc.cs" />
 
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
@@ -68,7 +69,7 @@
     <Message Text="✅ Package files copied to $(OutputPath)..\" Importance="High" />
   </Target>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipLocalPluginRegistration)' != 'true'">
     <Exec Condition="$(OS) == 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; &quot;$(PluginDir)$(ProjectName).link&quot;" />
     <Exec Condition="$(OS) != 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; $(PluginDir)$(ProjectName).link" />
     <Message Text="🔨 Created plugin link at: $(PluginDir)$(ProjectName).link" Importance="High" />

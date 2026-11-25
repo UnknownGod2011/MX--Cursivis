@@ -18,7 +18,7 @@ description: Bring intelligence to your cursor with selection-aware MX actions a
 pluginFileName: CursivisPlugin.dll
 
 # Plugin version.
-version: 1.5.3
+version: 1.5.4
 
 # Author of the plugin. The author can be a company or an individual developer.
 author: Tanush Shah
@@ -54,8 +54,8 @@ pluginCapabilities:
     # Uncomment the following line if the plugin sends keyboard shortcuts to a target application.
     #- ActivatesApplication
 
-# Minimum Loupedeck version supported by the plugin.
-minimumLoupedeckVersion: 6.2.1
+# Logi Plugin Service 6.4 introduced the .NET 10 runtime used by this plugin.
+minimumLoupedeckVersion: 6.4.0
 
 
 # ==================================================================================================

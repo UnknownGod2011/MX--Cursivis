@@ -1,4 +1,5 @@
 using Cursivis.Companion.Models;
+using Cursivis.Security;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -11,16 +12,12 @@ public sealed class BrowserAutomationClient : IDisposable
 {
     private readonly HttpClient _httpClient;
 
-    public BrowserAutomationClient()
+    public BrowserAutomationClient(string? configuredUrl = null)
     {
         var browserAgentUrl = Environment.GetEnvironmentVariable("CURSIVIS_BROWSER_AGENT_URL")
-            ?? "http://127.0.0.1:48820";
+            ?? configuredUrl ?? "http://127.0.0.1:48820";
 
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(browserAgentUrl),
-            Timeout = TimeSpan.FromSeconds(45)
-        };
+        _httpClient = LocalIpc.CreateHttpClient(new Uri(browserAgentUrl), LocalIpc.BrowserAgent, TimeSpan.FromSeconds(45));
     }
 
     public async Task<BrowserPageContextResponse> EnsureBrowserAsync(

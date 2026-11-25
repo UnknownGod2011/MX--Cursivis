@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CursivisCompanionSetup</AssemblyName>
     <RootNamespace>Cursivis.Setup</RootNamespace>
-    <Version>1.5.3</Version>
+    <Version>1.5.4</Version>
     <Authors>Tanush Shah</Authors>
     <Product>Cursivis Companion Setup</Product>
     <Description>One-click setup for the Cursivis Companion runtime.</Description>
@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\cursivis-icon.ico" />
+    <Compile Include="..\..\..\..\shared\local-ipc\LocalIpc.cs" Link="Security\LocalIpc.cs" />
   </ItemGroup>
 
 </Project>

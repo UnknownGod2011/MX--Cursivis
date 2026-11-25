@@ -297,6 +297,10 @@ h1 {
   line-height: 1.55;
 }
 
+.manual-band code {
+  overflow-wrap: anywhere;
+}
+
 .live-mode-band {
   display: grid;
   grid-template-columns: minmax(250px, 0.72fr) minmax(0, 1.28fr);

@@ -1,3 +1,4 @@
+using Cursivis.Security;
 using System.Net.WebSockets;
 using System.IO;
 using System.Text;
@@ -9,6 +10,7 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
 {
     private readonly ClientWebSocket _socket = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private readonly TaskCompletionSource<bool> _providerReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _turnCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private string? _latestInputTranscript;
     private string? _latestModelText;
@@ -18,11 +20,23 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        var endpoint = Environment.GetEnvironmentVariable("CURSIVIS_LIVE_VOICE_URL")
-            ?? "ws://127.0.0.1:51880/live";
+        var endpoint = Environment.GetEnvironmentVariable("CURSIVIS_LIVE_VOICE_URL");
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            var profile = await new RuntimeLaunchProfileService().TryLoadAsync();
+            var backendUrl = Environment.GetEnvironmentVariable("CURSIVIS_BACKEND_URL")
+                ?? profile?.BackendUrl ?? "http://127.0.0.1:51880";
+            var builder = new UriBuilder(backendUrl) { Path = "/live", Query = "" };
+            builder.Scheme = builder.Scheme == "https" ? "wss" : "ws";
+            endpoint = builder.Uri.AbsoluteUri;
+        }
 
-        await _socket.ConnectAsync(new Uri(endpoint), cancellationToken);
+        await LocalIpc.ConnectAsync(_socket, new Uri(endpoint), LocalIpc.Backend, cancellationToken);
         _receiveLoop = Task.Run(() => ReceiveLoopAsync(CancellationToken.None));
+        if (!await _providerReady.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken))
+        {
+            throw new InvalidOperationException("The realtime voice session did not start.");
+        }
     }
 
     public async Task SendAudioChunkAsync(byte[] chunk, string mimeType, CancellationToken cancellationToken)
@@ -71,8 +85,9 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
         {
             if (_socket.State == WebSocketState.Open)
             {
-                await SendJsonAsync(new { type = "close" }, CancellationToken.None);
-                await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+                using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await SendJsonAsync(new { type = "close" }, closeTimeout.Token);
+                await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeTimeout.Token);
             }
         }
         catch
@@ -115,6 +130,7 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
                 result = await _socket.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    _providerReady.TrySetResult(false);
                     _turnCompleted.TrySetResult();
                     return;
                 }
@@ -138,6 +154,9 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
             var type = typeElement.GetString();
             switch (type)
             {
+                case "live_open":
+                    _providerReady.TrySetResult(true);
+                    break;
                 case "input_transcription":
                     UpdateTranscript(root, "text", input: true);
                     break;
@@ -146,10 +165,11 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
                     UpdateTranscript(root, "text", input: false);
                     break;
                 case "turn_complete":
-                case "live_closed":
                     _turnCompleted.TrySetResult();
                     break;
+                case "live_closed":
                 case "error":
+                    _providerReady.TrySetResult(false);
                     _turnCompleted.TrySetResult();
                     break;
             }
